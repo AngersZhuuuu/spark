@@ -35,7 +35,6 @@ import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -250,13 +249,11 @@ abstract class RDD[T: ClassTag](
    */
   final def partitions: Array[Partition] = {
     checkpointRDD.map(_.partitions).getOrElse {
-      SparkHadoopUtil.get.runAsSparkUser { () =>
-        if (partitions_ == null) {
-          partitions_ = getPartitions
-          partitions_.zipWithIndex.foreach { case (partition, index) =>
-            require(partition.index == index,
-              s"partitions($index).partition == ${partition.index}, but it should equal $index")
-          }
+      if (partitions_ == null) {
+        partitions_ = getPartitions
+        partitions_.zipWithIndex.foreach { case (partition, index) =>
+          require(partition.index == index,
+            s"partitions($index).partition == ${partition.index}, but it should equal $index")
         }
       }
       partitions_
