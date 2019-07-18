@@ -27,10 +27,12 @@ import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session._
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
+
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
+import org.apache.spark.sql.hive.thriftserver.util.{ThriftServerHDFSDelegationTokenProvider, ThriftServerHadoopUtil}
 
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
@@ -39,7 +41,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
   private lazy val sparkSessionManager = new SparkSessionManager()
-  private val hadoopTokenProvider = new HadoopFSDelegationTokenProvider(SparkSQLEnv.sparkContext.conf, SparkSQLEnv.sparkContext.hadoopConfiguration)
+  private val hadoopTokenProvider = new ThriftServerHDFSDelegationTokenProvider(SparkSQLEnv.sparkContext.conf, SparkSQLEnv.sparkContext.hadoopConfiguration)
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
@@ -69,11 +71,11 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
 
       session = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)
       sessionWithUGI.setProxySession(session)
-      sparkSession = sparkSessionManager.getOrCreteSparkSession(sessionWithUGI, withImpersonation)
+      sparkSession = sparkSessionManager.getOrCreteSparkSession(sessionWithUGI, true)
     }
     else {
       session = new HiveSessionImpl(protocol, username, passwd, hiveConf, ipAddress)
-      sparkSession = sparkSessionManager.getOrCreteSparkSession(session, withImpersonation)
+      sparkSession = sparkSessionManager.getOrCreteSparkSession(session, false)
     }
     val ctx = sparkSession.sqlContext
     session.setSessionManager(this)

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.{IOException, PrintStream}
-import java.security.PrivilegedExceptionAction
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.hadoop.hive.conf.HiveConf
@@ -26,12 +25,15 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli.HiveSQLException
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImplwithUGI}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.thriftserver.SparkSQLEnv.sparkContext
+import org.apache.spark.sql.hive.thriftserver.util.ThriftServerHadoopUtil
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 
 class SparkSessionManager extends Logging {
@@ -47,7 +49,6 @@ class SparkSessionManager extends Logging {
       hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
       try {
         Hive.closeCurrent()
-        Hive.set(null)
         Hive.get(hiveConf).getDelegationToken(userName, userName)
       } catch {
         case e: HiveException =>
@@ -65,16 +66,7 @@ class SparkSessionManager extends Logging {
       cachedSession.get(session.getUserName).newSession()
     } else {
       val ugi = if (withImpersonation) {
-        if (session.getUserName == null) throw new HiveSQLException("No username provided for impersonation")
-        if (UserGroupInformation.isSecurityEnabled) try
-          UserGroupInformation.createProxyUser(session.getUserName, UserGroupInformation.getLoginUser)
-        catch {
-          case e: IOException =>
-            throw new HiveSQLException("Couldn't setup proxy user", e)
-        }
-        else {
-          UserGroupInformation.createRemoteUser(session.getUserName)
-        }
+        session.asInstanceOf[HiveSessionImplwithUGI].getSessionUgi
       } else {
         UserGroupInformation.getLoginUser
       }
@@ -88,8 +80,8 @@ class SparkSessionManager extends Logging {
           throw new HiveSQLException("Couldn't setup delegation token in the ugi", e)
       }
 
-      val sparkSession = ugi.doAs(new PrivilegedExceptionAction[SparkSession] {
-        override def run(): SparkSession = {
+      val sparkSession: SparkSession =
+        ThriftServerHadoopUtil.doAs[SparkSession](ugi) { () =>
           Hive.closeCurrent()
           val sessionForSpecUser = new SparkSession(sparkContext, SparkSQLEnv.extension)
           sessionForSpecUser.catalog
@@ -102,8 +94,6 @@ class SparkSessionManager extends Logging {
           sessionForSpecUser.conf.set(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
           sessionForSpecUser
         }
-      })
-
       cachedSession.put(session.getUserName, sparkSession)
       sparkSession
     }
