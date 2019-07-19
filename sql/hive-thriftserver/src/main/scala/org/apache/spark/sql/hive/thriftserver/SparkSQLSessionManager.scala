@@ -27,13 +27,14 @@ import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session._
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
-
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 import org.apache.spark.sql.hive.thriftserver.util.{ThriftServerHDFSDelegationTokenProvider, ThriftServerHadoopUtil}
 
+import scala.collection.JavaConverters._
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends SessionManager(hiveServer)
@@ -64,6 +65,11 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       val originalCreds = ugi.getCredentials
       val creds = new Credentials()
       ThriftServerHadoopUtil.doAs(ugi)(() => hadoopTokenProvider.obtainDelegationTokens(creds, username))
+
+      val tokens: String = creds.getAllTokens.asScala.map(token => {
+        token.encodeToUrlString()
+      }).mkString(SparkContext.SPARK_JOB_TOKEN_DELIMiTER)
+
       ugi.addCredentials(creds)
       val existing = ugi.getCredentials()
       existing.mergeAll(originalCreds)
@@ -71,13 +77,12 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
 
       session = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)
       sessionWithUGI.setProxySession(session)
+      sparkSqlOperationManager.sessionToTokens.put(session.getSessionHandle, tokens)
       sparkSession = sparkSessionManager.getOrCreteSparkSession(sessionWithUGI, true)
-    }
-    else {
+    } else {
       session = new HiveSessionImpl(protocol, username, passwd, hiveConf, ipAddress)
       sparkSession = sparkSessionManager.getOrCreteSparkSession(session, false)
     }
-    val ctx = sparkSession.sqlContext
     session.setSessionManager(this)
     session.setOperationManager(operationManager)
     try
@@ -113,5 +118,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
+    sparkSqlOperationManager.sessionToTokens.remove(sessionHandle)
   }
 }
