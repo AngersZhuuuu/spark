@@ -752,21 +752,23 @@ class HiveThriftBinaryServerForProxyWithSecureSuite extends HiveThriftJdbcForPro
 abstract class HiveThriftJdbcForProxyTest(secure: Boolean = false) extends HiveThriftServer2ForProxyTest(secure) {
   Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
-  private def jdbcUriForProxu(user: String) =
+  private def jdbcUriForProxu(user: String): String =
     if (secure) {
       if (mode == ServerMode.http) {
         s"""jdbc:hive2://localhost:$serverPort/
            |default?hive.server2.proxy.user=${user};
-           |principal=${clientPrincipal(HIVE_HIVESERVER2_USER)};
+           |principal=${clientPrincipal(STS_USER)};
            |hive.server2.transport.mode=http;
            |hive.server2.thrift.http.path=cliservice;
            |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
       } else {
-        s"""jdbc:hive2://localhost:$serverPort/?
+        s"""jdbc:hive2://localhost:$serverPort/default?
            |hive.server2.proxy.user=${user};
-           |principal=${clientPrincipal(HIVE_HIVESERVER2_USER)};
-           |${hiveConfList}#${hiveVarList}"""
+           |principal=${clientPrincipal(STS_USER)};
+           |${hiveConfList}#${hiveVarList}
+           """
+          .stripMargin.split("\n").mkString.trim
       }
     } else {
       if (mode == ServerMode.http) {
@@ -777,16 +779,18 @@ abstract class HiveThriftJdbcForProxyTest(secure: Boolean = false) extends HiveT
            |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
       } else {
-        s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
+        s"jdbc:hive2://localhost:$serverPort/default?${hiveConfList}#${hiveVarList}"
       }
     }
 
-  def withMultipleConnectionJdbcStatement(users: String, tableNames: String*)(fs: (Statement => Unit)*) = {
-    println(user)
+  def withMultipleConnectionJdbcStatement(proxyUser: String, tableNames: String*)(fs: (Statement => Unit)*) = {
+    println(proxyUser)
     if (secure) {
       kinit(clientPrincipal(STS_USER), KEYTAB_BASE_DIR + "/spark.keytab")
     }
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUriForProxu(user), user, "") }
+    println(jdbcUriForProxu(proxyUser))
+    Class.forName("org.apache.hive.jdbc.HiveDriver")
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUriForProxu(proxyUser)) }
     val statements = connections.map(_.createStatement())
     try {
       statements.zip(fs).foreach { case (s, f) => f(s) }
@@ -824,9 +828,9 @@ abstract class HiveThriftJdbcForProxyTest(secure: Boolean = false) extends HiveT
     }
   }
 
-  def withJdbcStatement(user: String, tableNames: String*)(f: Statement => Unit) {
-    println("withJdbcStatement => " + user)
-    withMultipleConnectionJdbcStatement(user, tableNames: _*)(f)
+  def withJdbcStatement(proxyUser: String, tableNames: String*)(f: Statement => Unit) {
+    println("withJdbcStatement => " + proxyUser)
+    withMultipleConnectionJdbcStatement(proxyUser, tableNames: _*)(f)
   }
 }
 
@@ -976,68 +980,68 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
     UserGroupInformation.loginUserFromKeytab(principal, keyTab)
   }
 
-  private class RunSTS() extends Runnable {
-
-    def prepareSystemProperties(port: Int): Unit = {
-      val portConf = if (mode == ServerMode.binary) {
-        ConfVars.HIVE_SERVER2_THRIFT_PORT
-      } else {
-        ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
-      }
-
-      val driverClassPath: String = {
-        // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
-        // overrides all other potential log4j configurations contained in other dependency jar files.
-        val tempLog4jConf = Utils.createTempDir().getCanonicalPath
-
-        Files.write(
-          """log4j.rootCategory=INFO, console
-            |log4j.appender.console=org.apache.log4j.ConsoleAppender
-            |log4j.appender.console.target=System.err
-            |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-            |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
-          """.stripMargin,
-          new File(s"$tempLog4jConf/log4j.properties"),
-          StandardCharsets.UTF_8)
-
-        tempLog4jConf
-      }
-
-
-      System.setProperty("master", "local")
-      System.setProperty(ConfVars.METASTOREURIS.toString, metastoreUri)
-      System.setProperty(ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST.toString, "localhost")
-      System.setProperty(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.toString, mode.toString)
-      System.setProperty(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION.toString, operationLogPath.getAbsolutePath)
-      System.setProperty(ConfVars.LOCALSCRATCHDIR.toString, lScratchDir.getAbsolutePath)
-      System.setProperty("portConf", port.toString)
-      System.setProperty("spark.driver.extraClassPath", driverClassPath)
-      System.setProperty("spark.ui.enabled", "false")
-      System.setProperty("spark.driver.extraJavaOptions", "-Dlog4j.debug")
-      extraConfPair.foreach(kv => {
-        System.setProperty(kv._1, kv._2)
-      })
-
-      if (secure) {
-        System.setProperty("java.security.krb5.conf", miniKDC.getKrb5conf.getAbsolutePath)
-        val conf = new org.apache.hadoop.conf.Configuration()
-        conf.set("hadoop.security.authentication", "Kerberos")
-        UserGroupInformation.setConfiguration(conf)
-        System.setProperty("spark.kerberos.keytab", s"${KEYTAB_BASE_DIR}/spark.keytab")
-        System.setProperty("spark.kerberos.principal",s"${clientPrincipal(STS_USER)}")
-        System.setProperty(s"${ConfVars.HIVE_SERVER2_AUTHENTICATION}", "KERBEROS")
-        System.setProperty(s"${ConfVars.HIVE_SERVER2_ENABLE_DOAS}", "true")
-        System.setProperty(s"${ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB}", "${KEYTAB_BASE_DIR}/hiveserver2.keytab")
-        System.setProperty(s"${ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL}",s"${clientPrincipal(HIVE_HIVESERVER2_USER)}")
-      }
-
-
-    }
-
-    override def run(): Unit = {
-
-    }
-  }
+  //  private class RunSTS() extends Runnable {
+  //
+  //    def prepareSystemProperties(port: Int): Unit = {
+  //      val portConf = if (mode == ServerMode.binary) {
+  //        ConfVars.HIVE_SERVER2_THRIFT_PORT
+  //      } else {
+  //        ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
+  //      }
+  //
+  //      val driverClassPath: String = {
+  //        // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+  //        // overrides all other potential log4j configurations contained in other dependency jar files.
+  //        val tempLog4jConf = Utils.createTempDir().getCanonicalPath
+  //
+  //        Files.write(
+  //          """log4j.rootCategory=INFO, console
+  //            |log4j.appender.console=org.apache.log4j.ConsoleAppender
+  //            |log4j.appender.console.target=System.err
+  //            |log4j.appender.console.layout=org.apache.log4j.PatternLayout
+  //            |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+  //          """.stripMargin,
+  //          new File(s"$tempLog4jConf/log4j.properties"),
+  //          StandardCharsets.UTF_8)
+  //
+  //        tempLog4jConf
+  //      }
+  //
+  //
+  //      System.setProperty("master", "local")
+  //      System.setProperty(ConfVars.METASTOREURIS.toString, metastoreUri)
+  //      System.setProperty(ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST.toString, "localhost")
+  //      System.setProperty(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.toString, mode.toString)
+  //      System.setProperty(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION.toString, operationLogPath.getAbsolutePath)
+  //      System.setProperty(ConfVars.LOCALSCRATCHDIR.toString, lScratchDir.getAbsolutePath)
+  //      System.setProperty("portConf", port.toString)
+  //      System.setProperty("spark.driver.extraClassPath", driverClassPath)
+  //      System.setProperty("spark.ui.enabled", "false")
+  //      System.setProperty("spark.driver.extraJavaOptions", "-Dlog4j.debug")
+  //      extraConfPair.foreach(kv => {
+  //        System.setProperty(kv._1, kv._2)
+  //      })
+  //
+  //      if (secure) {
+  //        System.setProperty("java.security.krb5.conf", miniKDC.getKrb5conf.getAbsolutePath)
+  //        val conf = new org.apache.hadoop.conf.Configuration()
+  //        conf.set("hadoop.security.authentication", "Kerberos")
+  //        UserGroupInformation.setConfiguration(conf)
+  //        System.setProperty("spark.kerberos.keytab", s"${KEYTAB_BASE_DIR}/spark.keytab")
+  //        System.setProperty("spark.kerberos.principal",s"${clientPrincipal(STS_USER)}")
+  //        System.setProperty(s"${ConfVars.HIVE_SERVER2_AUTHENTICATION}", "KERBEROS")
+  //        System.setProperty(s"${ConfVars.HIVE_SERVER2_ENABLE_DOAS}", "true")
+  //        System.setProperty(s"${ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB}", "${KEYTAB_BASE_DIR}/hiveserver2.keytab")
+  //        System.setProperty(s"${ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL}",s"${clientPrincipal(HIVE_HIVESERVER2_USER)}")
+  //      }
+  //
+  //
+  //    }
+  //
+  //    override def run(): Unit = {
+  //
+  //    }
+  //  }
 
   private class RunMS(var port: String) extends Runnable {
 
