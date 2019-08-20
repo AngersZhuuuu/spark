@@ -135,9 +135,14 @@ public class HiveAuthFactory {
       if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName())) {
         String principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL);
         String keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB);
+        LOG.info("Current User "+ UserGroupInformation.getCurrentUser());
+        LOG.info("Hive Server2 Config " + principal + "  keytab "+ keytab);
         if (needUgiLogin(UserGroupInformation.getCurrentUser(),
           SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
+          LOG.info("Login in with principal " + principal + "  keytab "+ keytab);
+          LOG.info("Login principle name " + SecurityUtil.getServerPrincipal(principal, "0.0.0.0"));
           saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(principal, keytab);
+          LOG.info("Current login user = " + UserGroupInformation.getLoginUser());
         } else {
           // Using the default constructor to avoid unnecessary UGI login.
           saslServer = new HadoopThriftAuthBridge.Server();

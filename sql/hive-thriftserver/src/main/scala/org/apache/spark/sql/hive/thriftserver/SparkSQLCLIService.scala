@@ -52,6 +52,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
     var sparkServiceUGI: UserGroupInformation = null
     var httpUGI: UserGroupInformation = null
 
+    println(s"isSecurityEnabled => ${UserGroupInformation.isSecurityEnabled}")
     if (UserGroupInformation.isSecurityEnabled) {
       try {
         val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
@@ -60,7 +61,9 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
           throw new IOException(
             "HiveServer2 Kerberos principal or keytab is not correctly configured")
         }
-
+        println(s"Principal => ${principal}")
+        println(s"keytab => ${keyTabFile}")
+        println(s"CurrentUser => ${UserGroupInformation.getCurrentUser}")
         val originalUgi = UserGroupInformation.getCurrentUser
         sparkServiceUGI = if (HiveAuthFactory.needUgiLogin(originalUgi,
           SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)) {
@@ -69,6 +72,8 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
         } else {
           originalUgi
         }
+
+        println(s"serviceUGI => ${sparkServiceUGI}")
 
         setSuperField(this, "serviceUGI", sparkServiceUGI)
       } catch {
