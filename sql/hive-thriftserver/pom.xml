@@ -142,6 +142,12 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <!-- https://mvnrepository.com/artifact/org.codehaus.mojo/keytool-api -->
+    <dependency>
+      <groupId>org.codehaus.mojo</groupId>
+      <artifactId>keytool-api</artifactId>
+      <version>1.5</version>
+    </dependency>
     <dependency>
       <groupId>net.sf.jpam</groupId>
       <artifactId>jpam</artifactId>

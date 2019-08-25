@@ -141,8 +141,9 @@ public class HiveAuthFactory {
           SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
           LOG.info("Login in with principal " + principal + "  keytab "+ keytab);
           LOG.info("Login principle name " + SecurityUtil.getServerPrincipal(principal, "0.0.0.0"));
+          LOG.info("isSecurityEnable " + UserGroupInformation.isSecurityEnabled());
           saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(principal, keytab);
-          LOG.info("Current login user = " + UserGroupInformation.getLoginUser());
+          LOG.info("After Create Current login user = " + UserGroupInformation.getLoginUser());
         } else {
           // Using the default constructor to avoid unnecessary UGI login.
           saslServer = new HadoopThriftAuthBridge.Server();

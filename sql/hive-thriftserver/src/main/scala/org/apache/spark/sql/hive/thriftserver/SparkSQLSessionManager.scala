@@ -89,7 +89,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
           sparkSqlOperationManager.sessionToTokens.put(session.getSessionHandle, tokens)
         } catch {
           case e: Exception =>
-            throw new HiveSQLException(s"GOT HDFS TOKEN for user ${username} failed")
+            throw new HiveSQLException(s"GOT HDFS TOKEN for user ${username} failed", e)
         }
       }
       session = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)

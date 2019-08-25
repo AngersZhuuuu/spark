@@ -17,25 +17,28 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.File
+import java.io.{File, FileInputStream}
+import java.net.{InetAddress, UnknownHostException}
 import java.nio.charset.StandardCharsets
-import java.sql.{DriverManager, ResultSet, Statement}
-import java.util.Locale
+import java.security.{KeyStore, PrivilegedAction}
+import java.sql.{Connection, DriverManager, ResultSet, Statement}
+import java.util.{Locale, Properties}
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.hdfs.MiniDFSCluster
+import org.apache.hadoop.hdfs.{MiniDFSCluster, MiniDFSClusterWithNodeGroup}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.HiveMetaStore
 import org.apache.hadoop.minikdc.MiniKdc
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.common.util.HiveVersionInfo
-import org.apache.hive.jdbc.HiveDriver
+import org.apache.hive.jdbc.{HiveConnection, HiveDriver}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.codehaus.mojo.keytool.requests.KeyToolGenerateCertificateRequest
 import org.scalatest.BeforeAndAfterAll
 
 import scala.collection.mutable.ArrayBuffer
@@ -752,45 +755,47 @@ class HiveThriftBinaryServerForProxyWithSecureSuite extends HiveThriftJdbcForPro
 abstract class HiveThriftJdbcForProxyTest(secure: Boolean = false) extends HiveThriftServer2ForProxyTest(secure) {
   Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
+  //  hive.server2.proxy.user=${user};
   private def jdbcUriForProxu(user: String): String =
     if (secure) {
       if (mode == ServerMode.http) {
         s"""jdbc:hive2://localhost:$serverPort/
-           |default?hive.server2.proxy.user=${user};
-           |principal=${clientPrincipal(STS_USER)};
+           |default;
+           |principal=${clientPrincipal(HIVE_HIVESERVER2_USER)};
+           |hive.server2.proxy.user=${user};
            |hive.server2.transport.mode=http;
            |hive.server2.thrift.http.path=cliservice;
            |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
       } else {
-        s"""jdbc:hive2://localhost:$serverPort/default?
+        s"""jdbc:hive2://localhost:$serverPort/default;
+           |principal=${clientPrincipal(HIVE_HIVESERVER2_USER)};
            |hive.server2.proxy.user=${user};
-           |principal=${clientPrincipal(STS_USER)};
-           |${hiveConfList}#${hiveVarList}
            """
           .stripMargin.split("\n").mkString.trim
       }
     } else {
       if (mode == ServerMode.http) {
         s"""jdbc:hive2://localhost:$serverPort/
-           |default?
+           |default;
+           |hive.server2.proxy.user=${user};
            |hive.server2.transport.mode=http;
            |hive.server2.thrift.http.path=cliservice;
            |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
       } else {
-        s"jdbc:hive2://localhost:$serverPort/default?${hiveConfList}#${hiveVarList}"
+        s"jdbc:hive2://localhost:$serverPort/default;hive.server2.proxy.user=${user};${hiveConfList}#${hiveVarList}"
       }
     }
 
   def withMultipleConnectionJdbcStatement(proxyUser: String, tableNames: String*)(fs: (Statement => Unit)*) = {
     println(proxyUser)
+    println(jdbcUriForProxu(proxyUser))
+    Class.forName("org.apache.hive.jdbc.HiveDriver")
     if (secure) {
       kinit(clientPrincipal(STS_USER), KEYTAB_BASE_DIR + "/spark.keytab")
     }
-    println(jdbcUriForProxu(proxyUser))
-    Class.forName("org.apache.hive.jdbc.HiveDriver")
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUriForProxu(proxyUser)) }
+    val connections = fs.map { _ => new HiveConnection(jdbcUriForProxu(proxyUser), new Properties()) }
     val statements = connections.map(_.createStatement())
     try {
       statements.zip(fs).foreach { case (s, f) => f(s) }
@@ -837,6 +842,8 @@ abstract class HiveThriftJdbcForProxyTest(secure: Boolean = false) extends HiveT
 abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSuite with BeforeAndAfterAll with Logging {
   def mode: ServerMode.Value
 
+  import HiveThriftServer2ForProxyTest._
+
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")
   private val LOG_FILE_MARK = s"starting $CLASS_NAME, logging to "
 
@@ -859,6 +866,7 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
   protected var warehousePath: File = _
   protected var metastorePath: File = _
 
+  private var driverClassPath: String = _
   private val pidDir: File = Utils.createTempDir(namePrefix = "thriftserver-pid")
   protected var logPath: File = _
   protected var operationLogPath: File = _
@@ -870,14 +878,17 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
   private var miniKDC: MiniKdc = _
   private var miniDFSCluster: MiniDFSCluster = _
   private var miniFS: FileSystem = _
+  private var hadoopConfPath: File = _
+  private var nameDir: File = _
+  private var dataDir: File = _
   private var miniClusterPrepare: Boolean = false
 
   protected var KEYTAB_BASE_DIR: File = _
   protected val STS_USER = "hadoop/sparkthriftserver"
   protected val HIVE_METASTORE_USER = "hive/metastore"
-  protected val DFS_NN_USER = "nn/localhost"
-  protected val DFS_DN_USER = "dn/localhost"
-  protected val DFS_HTTP_USER = "http/localhost"
+  protected val DFS_NN_USER = s"nn/${getHostNameForLiunx()}"
+  protected val DFS_DN_USER = s"dn/${getHostNameForLiunx()}"
+  protected val DFS_HTTP_USER = s"HTTP/${getHostNameForLiunx()}"
   protected val HIVE_HIVESERVER2_USER = "hive/hiveserver"
 
 
@@ -892,7 +903,7 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
       ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
     }
 
-    val driverClassPath = {
+    driverClassPath = {
       // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
@@ -914,7 +925,6 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
       s"""$startScript
          |  --master local
          |  --deploy-mode client
-         |  --conf spark.hadoop.hadoop.security.authentication=kerberos
          |  --conf spark.kerberos.keytab=${KEYTAB_BASE_DIR}/spark.keytab
          |  --conf spark.kerberos.principal=${clientPrincipal(STS_USER)}
          |  --hiveconf ${ConfVars.HIVE_SERVER2_AUTHENTICATION}=KERBEROS
@@ -980,69 +990,6 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
     UserGroupInformation.loginUserFromKeytab(principal, keyTab)
   }
 
-  //  private class RunSTS() extends Runnable {
-  //
-  //    def prepareSystemProperties(port: Int): Unit = {
-  //      val portConf = if (mode == ServerMode.binary) {
-  //        ConfVars.HIVE_SERVER2_THRIFT_PORT
-  //      } else {
-  //        ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
-  //      }
-  //
-  //      val driverClassPath: String = {
-  //        // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
-  //        // overrides all other potential log4j configurations contained in other dependency jar files.
-  //        val tempLog4jConf = Utils.createTempDir().getCanonicalPath
-  //
-  //        Files.write(
-  //          """log4j.rootCategory=INFO, console
-  //            |log4j.appender.console=org.apache.log4j.ConsoleAppender
-  //            |log4j.appender.console.target=System.err
-  //            |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-  //            |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
-  //          """.stripMargin,
-  //          new File(s"$tempLog4jConf/log4j.properties"),
-  //          StandardCharsets.UTF_8)
-  //
-  //        tempLog4jConf
-  //      }
-  //
-  //
-  //      System.setProperty("master", "local")
-  //      System.setProperty(ConfVars.METASTOREURIS.toString, metastoreUri)
-  //      System.setProperty(ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST.toString, "localhost")
-  //      System.setProperty(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.toString, mode.toString)
-  //      System.setProperty(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION.toString, operationLogPath.getAbsolutePath)
-  //      System.setProperty(ConfVars.LOCALSCRATCHDIR.toString, lScratchDir.getAbsolutePath)
-  //      System.setProperty("portConf", port.toString)
-  //      System.setProperty("spark.driver.extraClassPath", driverClassPath)
-  //      System.setProperty("spark.ui.enabled", "false")
-  //      System.setProperty("spark.driver.extraJavaOptions", "-Dlog4j.debug")
-  //      extraConfPair.foreach(kv => {
-  //        System.setProperty(kv._1, kv._2)
-  //      })
-  //
-  //      if (secure) {
-  //        System.setProperty("java.security.krb5.conf", miniKDC.getKrb5conf.getAbsolutePath)
-  //        val conf = new org.apache.hadoop.conf.Configuration()
-  //        conf.set("hadoop.security.authentication", "Kerberos")
-  //        UserGroupInformation.setConfiguration(conf)
-  //        System.setProperty("spark.kerberos.keytab", s"${KEYTAB_BASE_DIR}/spark.keytab")
-  //        System.setProperty("spark.kerberos.principal",s"${clientPrincipal(STS_USER)}")
-  //        System.setProperty(s"${ConfVars.HIVE_SERVER2_AUTHENTICATION}", "KERBEROS")
-  //        System.setProperty(s"${ConfVars.HIVE_SERVER2_ENABLE_DOAS}", "true")
-  //        System.setProperty(s"${ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB}", "${KEYTAB_BASE_DIR}/hiveserver2.keytab")
-  //        System.setProperty(s"${ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL}",s"${clientPrincipal(HIVE_HIVESERVER2_USER)}")
-  //      }
-  //
-  //
-  //    }
-  //
-  //    override def run(): Unit = {
-  //
-  //    }
-  //  }
-
   private class RunMS(var port: String) extends Runnable {
 
     override def run(): Unit = {
@@ -1096,64 +1043,279 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
 
   private def setUpMiniKdc(): Unit = {
     println("Starting MiniKDC")
-    val kdcDir = Utils.createTempDir()
-    val kdcConf = MiniKdc.createConf
-    miniKDC = new MiniKdc(kdcConf, kdcDir)
-    miniKDC.start()
-    kdcReady = true
+    try {
+      val kdcDir = Utils.createTempDir()
+      val kdcConf = MiniKdc.createConf
+      kdcConf.setProperty("kdc.bind.address", getHostNameForLiunx())
+      kdcConf.setProperty("kdc.port", s"${serverPort + 20000}")
+      miniKDC = new MiniKdc(kdcConf, kdcDir)
+      miniKDC.start()
+      println(s"kdcport ${miniKDC.getPort}")
+      println(s"kdchost ${miniKDC.getHost}")
+      kdcReady = true
+    } catch {
+      case e: Exception => println(e.printStackTrace())
+    }
+  }
+
+  private def core_site =
+    s"""
+       |<?xml version="1.0"?>
+       |<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+       |
+      |<!-- Put site-specific property overrides in this file. -->
+       |
+      |<configuration>
+       |  <property>
+       |    <name>hadoop.security.authorization</name>
+       |    <value>true</value>
+       |  </property>
+       |  <property>
+       |    <name>hadoop.security.authentication</name>
+       |    <value>kerberos</value>
+       |  </property>
+       |  <property>
+       |    <name>hadoop.proxyuser.hadoop.hosts</name>
+       |    <value>*</value>
+       |  </property>
+       |  <property>
+       |    <name>hadoop.proxyuser.hadoop.users</name>
+       |    <value>*</value>
+       |  </property>
+       |  <property>
+       |    <name>hadoop.proxyuser.hadoop.groups</name>
+       |    <value>*</value>
+       |  </property>
+       |  <property>
+       |    <name>hadoop.proxyuser.httpfs.hosts</name>
+       |    <value>*</value>
+       |  </property>
+       |  <property>
+       |    <name>hadoop.proxyuser.httpfs.users</name>
+       |    <value>*</value>
+       |  </property>
+       |  <property>
+       |    <name>hadoop.proxyuser.httpfs.groups</name>
+       |    <value>*</value>
+       |  </property>
+       |  <property>
+       |   <name>hadoop.security.auth_to_local</name>
+       |   <value>
+       |       RULE:[2:${"1@$0"}](nn/.*@.*ESRICHINA.COM)s/.*/hdfs/
+       |       RULE:[2:${"1@$0"}](sn/.*@.*ESRICHINA.COM)s/.*/hdfs/
+       |       RULE:[2:${"1@$0"}](dn/.*@.*ESRICHINA.COM)s/.*/hdfs/
+       |       RULE:[2:${"1@$0"}](nm/.*@.*ESRICHINA.COM)s/.*/yarn/
+       |       RULE:[2:${"1@$0"}](rm/.*@.*ESRICHINA.COM)s/.*/yarn/
+       |       RULE:[2:${"1@$0"}](tl/.*@.*ESRICHINA.COM)s/.*/yarn/
+       |       RULE:[2:${"1@$0"}](jhs/.*@.*ESRICHINA.COM)s/.*/mapred/
+       |       RULE:[2:${"1@$0"}](HTTP/.*@.*ESRICHINA.COM)s/.*/hdfs/
+       |       DEFAULT
+       |   </value>
+       |  </property>
+       |</configuration>
+    """.stripMargin.trim
+
+
+  private def hdfs_site =
+    s"""
+       |<?xml version="1.0"?>
+       |<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+       |<configuration>
+       |<property>
+       |  <name>dfs.block.access.token.enable</name>
+       |  <value>true</value>
+       |</property>
+       |<property>
+       |  <name>dfs.namenode.name.dir</name>
+       |  <value>${nameDir.getAbsolutePath}</value>
+       |</property>
+       |<property>
+       |  <name>dfs.namenode.hosts</name>
+       |  <value>${getHostNameForLiunx()}</value>
+       |</property>
+       |<property>
+       |  <name>dfs.datanode.data.dir</name>
+       |  <value>${dataDir.getAbsolutePath}</value>
+       |</property>
+       |<!-- NameNode security config -->
+       |<property>
+       |  <name>dfs.namenode.kerberos.principal</name>
+       |  <value>${clientPrincipal(DFS_NN_USER)}</value>
+       |</property>
+       |<property>
+       |  <name>dfs.namenode.keytab.file</name>
+       |  <value>${KEYTAB_BASE_DIR}/minicluster.keytab</value>
+       |</property>
+       |<property>
+       |  <name>dfs.namenode.kerberos.internal.spnego.principal</name>
+       |  <value>${clientPrincipal(DFS_HTTP_USER)}</value>
+       |</property>
+       |
+       |<!--Secondary NameNode security config -->
+       |<property>
+       |  <name>dfs.secondary.namenode.kerberos.principal</name>
+       |  <value>${clientPrincipal(DFS_NN_USER)}</value>
+       |</property>
+       |<property>
+       |  <name>dfs.secondary.namenode.keytab.file</name>
+       |  <value>${KEYTAB_BASE_DIR}/minicluster.keytab</value>
+       |</property>
+       |<property>
+       |  <name>dfs.secondary.namenode.kerberos.internal.spnego.principal</name>
+       |  <value>${clientPrincipal(DFS_HTTP_USER)}</value>
+       |</property>
+       |
+       |<property>
+       |  <name>dfs.datanode.kerberos.principal</name>
+       |  <value>${clientPrincipal(DFS_DN_USER)}</value>
+       |</property>
+       |<property>
+       |  <name>dfs.datanode.keytab.file</name>
+       |  <value>${KEYTAB_BASE_DIR}/minicluster.keytab</value>
+       |</property>
+       |<property>
+       |  <name>dfs.datanode.data.dir.perm</name>
+       |  <value>700</value>
+       |</property>
+       |<property>
+       |  <name>dfs.datanode.hostname</name>
+       |  <value>${getHostNameForLiunx()}</value>
+       |</property>
+       |<property>
+       |  <name>dfs.datanode.address</name>
+       |  <value>0.0.0.0:50004</value>
+       |</property>
+       |<property>
+       |  <name>dfs.datanode.http.address</name>
+       |  <value>0.0.0.0:50006</value>
+       |</property>
+       |<property>
+       |  <name>ignore.secure.ports.for.testing</name>
+       |  <value>true</value>
+       |</property>
+       |
+       |<!--configure secure WebHDFS -->
+       |<property>
+       |  <name>dfs.webhdfs.enabled</name>
+       |  <value>true</value>
+       |</property>
+       |<property>
+       |  <name>dfs.web.authentication.kerberos.principal</name>
+       |  <value>${clientPrincipal(DFS_HTTP_USER)}</value>
+       |</property>
+       |<property>
+       |  <name>dfs.web.authentication.kerberos.keytab</name>
+       |  <value>${KEYTAB_BASE_DIR}/minicluster.keytab</value>
+       |</property>
+       |<property>
+       |  <name>dfs.permissions.supergroup</name>
+       |  <value>hdfs</value>
+       |  <description>The name of the group of super-users.</description>
+       |</property>
+       |</configuration>
+    """.stripMargin.trim
+
+  private def yarn_site =
+    """
+      |<?xml version="1.0"?>
+      |<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+      |
+      |<!-- Put site-specific property overrides in this file. -->
+      |
+      |<configuration>
+      |</configuration>
+    """.stripMargin.trim
+
+  private def mapred_site =
+    """
+      |<?xml version="1.0"?>
+      |<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+      |
+      |<!-- Put site-specific property overrides in this file. -->
+      |
+      |<configuration>
+      |</configuration>
+    """.stripMargin.trim
+
+
+  def createHDPConf(hdpConfPath: String): Unit = {
+    Files.write(core_site,
+      new File(hdpConfPath + "/core-site.xml"),
+      StandardCharsets.UTF_8)
+
+    Files.write(hdfs_site,
+      new File(hdpConfPath + "/hdfs-site.xml"),
+      StandardCharsets.UTF_8)
+
+    Files.write(yarn_site,
+      new File(hdpConfPath + "/yarn-site.xml"),
+      StandardCharsets.UTF_8)
+
+    Files.write(mapred_site,
+      new File(hdpConfPath + "/mapred-site.xml"),
+      StandardCharsets.UTF_8)
   }
 
   private class RunMiniCluster extends Runnable {
     override def run(): Unit = {
       try {
-        val dataNodes = 1
+        val dataNodes = 0
         // There will be 4 data nodes
         //    val taskTrackers = 1
         // There will be 4 task tracker nodes
+
+
         val config = new Configuration
-        if (secure) {
-          //          config.set("fs.defaultFS", "hdfs://localhost:9000")
-          //          config.set("dfs.block.access.token.enable", "true")
-          //          config.set("hadoop.security.authentication", "kerberos")
-          //          config.set("hadoop.security.authorization", "true")
-          //          config.set("hadoop.rpc.protection", "authentication")
-          //          config.set("dfs.namenode.kerberos.principal", clientPrincipal(DFS_NN_USER))
-          //          config.set("dfs.namenode.kerberos.https.principal", clientPrincipal(DFS_HTTP_USER))
-          //          config.set("dfs.namenode.keytab.file", s"${KEYTAB_BASE_DIR}/nn.keytab")
-          //          config.set("dfs.secondary.namenode.kerberos.principal", clientPrincipal(DFS_NN_USER))
-          //          config.set("dfs.secondary.namenode.keytab.file", s"${KEYTAB_BASE_DIR}/nn.keytab")
-          //          config.set("dfs.namenode.kerberos.internal.spnego.principal", clientPrincipal(DFS_HTTP_USER))
-          //          config.set("dfs.permissions.supergroup", "supergroup")
-          //          config.set("dfs.namenode.https-address", "0.0.0.0:50470")
-          //          config.set("dfs.data.transfer.protection", "authentication")
-          //          // datanode
-          //          config.set("dfs.datanode.data.dir.perm", "700")
-          //          config.set("dfs.datanode.address", "0.0.0.0:1004")
-          //          config.set("dfs.datanode.http.address", "0.0.0.0:1006")
-          //          config.set("dfs.datanode.https.address", "0.0.0.0:50470")
-          //          config.set("dfs.datanode.kerberos.principal", clientPrincipal(DFS_DN_USER))
-          //          config.set("dfs.datanode.keytab.file", s"${KEYTAB_BASE_DIR}/dn.keytab")
-          //          config.set("dfs.encrypt.data.transfer", "false")
-          //          // web
-          //          config.set("dfs.webhdfs.enabled", "true")
-          //          config.set("dfs.https.enable", "true")
-          //          config.set("dfs.http.policy", "HTTP_AND_HTTPS")
-          //          config.set("dfs.web.authentication.kerberos.principal", clientPrincipal(DFS_HTTP_USER))
-          //          config.set("dfs.web.authentication.kerberos.keytab", s"${KEYTAB_BASE_DIR}/nn.keytab")
-          //
-          //          config.set("hadoop.proxyuser.hadoop.hosts", "*")
-          //          config.set("hadoop.proxyuser.hadoop.users", "*")
-          //          config.set("hadoop.proxyuser.hive.hosts", "*")
-          //          config.set("hadoop.proxyuser.hive.users", "*")
-        }
+        hadoopConfPath.listFiles().foreach(file => {
+          config.addResource(new FileInputStream(file))
+        })
+
+        //        if (secure) {
+        //          config.set("dfs.block.access.token.enable", "true")
+        //          config.set("hadoop.security.authentication", "kerberos")
+        //          config.set("hadoop.security.authorization", "true")
+        //          config.set("hadoop.rpc.protection", "authentication")
+        //          config.set("dfs.namenode.kerberos.principal", clientPrincipal(DFS_NN_USER))
+        //          config.set("dfs.namenode.kerberos.https.principal", clientPrincipal(DFS_HTTP_USER))
+        //          config.set("dfs.namenode.keytab.file", s"${KEYTAB_BASE_DIR}/minicluster.keytab")
+        //          config.set("dfs.secondary.namenode.kerberos.principal", clientPrincipal(DFS_NN_USER))
+        //          config.set("dfs.secondary.namenode.keytab.file", s"${KEYTAB_BASE_DIR}/minicluster.keytab")
+        //          config.set("dfs.namenode.kerberos.internal.spnego.principal", clientPrincipal(DFS_HTTP_USER))
+        //          config.set("dfs.permissions.supergroup", "supergroup")
+        //          config.set("dfs.namenode.https-address", "0.0.0.0:50470")
+        //          config.set("dfs.data.transfer.protection", "authentication")
+        //          // datanode
+        //          config.set("dfs.datanode.data.dir.perm", "700")
+        //          config.set("dfs.datanode.address", "0.0.0.0:1004")
+        //          config.set("dfs.datanode.http.address", "0.0.0.0:1006")
+        //          config.set("dfs.datanode.https.address", "0.0.0.0:50470")
+        //          config.set("dfs.datanode.kerberos.principal", clientPrincipal(DFS_DN_USER))
+        //          config.set("dfs.datanode.keytab.file", s"${KEYTAB_BASE_DIR}/minicluster.keytab")
+        //          config.set("dfs.encrypt.data.transfer", "false")
+        //          // web
+        //          config.set("dfs.webhdfs.enabled", "true")
+        //          config.set("dfs.https.enable", "true")
+        //          config.set("dfs.http.policy", "HTTP_AND_HTTPS")
+        //          config.set("dfs.web.authentication.kerberos.principal", clientPrincipal(DFS_HTTP_USER))
+        //          config.set("dfs.web.authentication.kerberos.keytab", s"${KEYTAB_BASE_DIR}/minicluster.keytab")
+        //
+        //          config.set("hadoop.proxyuser.hadoop.hosts", "*")
+        //          config.set("hadoop.proxyuser.hadoop.users", "*")
+        //          config.set("hadoop.proxyuser.hive.hosts", "*")
+        //          config.set("hadoop.proxyuser.hive.users", "*")
+        //        }
 
         // Builds and starts the mini dfs and mapreduce clusters
         System.setProperty("hadoop.log.dir", s"target/tmp/logs/")
-        miniDFSCluster = new MiniDFSCluster(config, dataNodes, true, null)
+        miniDFSCluster = new MiniDFSCluster.Builder(config).build()
         miniFS = miniDFSCluster.getFileSystem
         miniClusterPrepare = true
       } catch {
-        case e: Exception => println(e.printStackTrace())
+        case e: Exception => {
+          println(e.printStackTrace())
+          throw e
+        }
+
       }
     }
   }
@@ -1174,12 +1336,15 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
   }
 
 
-  private def prepareSecure(): Unit = {
+  /**
+    * Init Kerberos Environment needed keytabs and principals
+    */
+  private def initKerberosKeyTabAndPrincipals(): Unit = {
     try {
       KEYTAB_BASE_DIR.setExecutable(true, false)
       KEYTAB_BASE_DIR.setReadable(true, false)
       prepareHiveMSSecure()
-      //      prepareMiniClusterSecure()
+      prepareMiniClusterSecure()
       prepareSparkSecure()
       prepareThriftServerSecure()
       KEYTAB_BASE_DIR.listFiles().foreach(file => {
@@ -1198,14 +1363,8 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
   }
 
   private def prepareMiniClusterSecure(): Unit = {
-    val miniClusterNNKeyTabFile = new File(KEYTAB_BASE_DIR, "nn.keytab")
-    miniKDC.createPrincipal(miniClusterNNKeyTabFile, DFS_NN_USER)
-    miniKDC.createPrincipal(miniClusterNNKeyTabFile, DFS_HTTP_USER)
-    val miniClusterDNKeyTabFile = new File(KEYTAB_BASE_DIR, "dn.keytab")
-    miniKDC.createPrincipal(miniClusterDNKeyTabFile, DFS_DN_USER)
-    miniKDC.createPrincipal(miniClusterDNKeyTabFile, DFS_HTTP_USER)
-    //    val miniClusterWebKeyTabFile = new File(KEYTAB_BASE_DIR, "web.keytab")
-    //    miniKDC.createPrincipal(miniClusterWebKeyTabFile, DFS_HTTP_USER)
+    val miniClusterNNKeyTabFile = new File(KEYTAB_BASE_DIR, "minicluster.keytab")
+    miniKDC.createPrincipal(miniClusterNNKeyTabFile, DFS_NN_USER, DFS_HTTP_USER, DFS_DN_USER)
   }
 
   private def prepareThriftServerSecure(): Unit = {
@@ -1217,7 +1376,6 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
     val sparkSecureKeyTab = new File(KEYTAB_BASE_DIR, "spark.keytab")
     miniKDC.createPrincipal(sparkSecureKeyTab, STS_USER)
   }
-
 
   private def startThriftServer(port: Int, msPort: Int, attempt: Int) = {
 
@@ -1232,14 +1390,25 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
     lScratchDir.delete()
     KEYTAB_BASE_DIR = Utils.createTempDir()
     println(KEYTAB_BASE_DIR)
+    hadoopConfPath = Utils.createTempDir()
+    println(s"hadoopConfDir => ${hadoopConfPath.getAbsolutePath}")
+    nameDir = Utils.createTempDir()
+    dataDir = Utils.createTempDir()
     logPath = null
     logTailingProcess = null
 
     if (secure) {
+      // start miniKDC
       setUpMiniKdc()
-      prepareSecure()
-      startMiniCluster()
+      // init keytabs and principals
+      initKerberosKeyTabAndPrincipals()
+
       kinit(clientPrincipal(STS_USER), KEYTAB_BASE_DIR + "/spark.keytab")
+      // create kerberos hadoop conf
+      createHDPConf(hadoopConfPath.getAbsolutePath)
+      // start miniCluster
+      startMiniCluster()
+
       println(s"Login user ${UserGroupInformation.getLoginUser.getUserName}")
     }
 
@@ -1264,17 +1433,34 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
     logInfo(s"Trying to start HiveThriftServer2: port=$port, mode=$mode, attempt=$attempt")
 
     logPath = {
-      val lines = Utils.executeAndGetOutput(
-        command = command,
-        extraEnvironment = Map(
-          // Disables SPARK_TESTING to exclude log4j.properties in test directories.
-          "SPARK_TESTING" -> "0",
-          // But set SPARK_SQL_TESTING to make spark-class happy.
-          "SPARK_SQL_TESTING" -> "1",
-          // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be
-          // started at a time, which is not Jenkins friendly.
-          "SPARK_PID_DIR" -> pidDir.getCanonicalPath),
-        redirectStderr = true)
+      val lines = if (secure) {
+        println("start Thrift In secure mode")
+        Utils.executeAndGetOutput(
+          command = command,
+          extraEnvironment = Map(
+            // HADOOP_CONF_DIR
+            "HADOOP_CONF_DIR" -> hadoopConfPath.getCanonicalPath,
+            // Disables SPARK_TESTING to exclude log4j.properties in test directories.
+            //            "SPARK_TESTING" -> "0",
+            // But set SPARK_SQL_TESTING to make spark-class happy.
+            "SPARK_SQL_TESTING" -> "1",
+            // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be
+            // started at a time, which is not Jenkins friendly.
+            "SPARK_PID_DIR" -> pidDir.getCanonicalPath),
+          redirectStderr = true)
+      } else {
+        Utils.executeAndGetOutput(
+          command = command,
+          extraEnvironment = Map(
+            // Disables SPARK_TESTING to exclude log4j.properties in test directories.
+            "SPARK_TESTING" -> "0",
+            // But set SPARK_SQL_TESTING to make spark-class happy.
+            "SPARK_SQL_TESTING" -> "1",
+            // Points SPARK_PID_DIR to SPARK_HOME, otherwise only 1 Thrift server instance can be
+            // started at a time, which is not Jenkins friendly.
+            "SPARK_PID_DIR" -> pidDir.getCanonicalPath),
+          redirectStderr = true)
+      }
 
       logInfo(s"COMMAND: $command")
       logInfo(s"OUTPUT: $lines")
@@ -1337,6 +1523,13 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
     KEYTAB_BASE_DIR.delete()
     KEYTAB_BASE_DIR = null
 
+    hadoopConfPath.delete()
+    hadoopConfPath = null
+    nameDir.delete()
+    nameDir = null
+    dataDir.delete()
+    dataDir = null
+
     Option(logPath).foreach(_.delete())
     logPath = null
 
@@ -1386,6 +1579,33 @@ abstract class HiveThriftServer2ForProxyTest(secure: Boolean) extends SparkFunSu
       logInfo("HiveThriftServer2 stopped")
     } finally {
       super.afterAll()
+    }
+  }
+}
+
+object HiveThriftServer2ForProxyTest {
+  def getHostNameForLiunx(): String = {
+    try {
+      (InetAddress.getLocalHost()).getCanonicalHostName()
+    } catch {
+      case uhe: UnknownHostException =>
+        val host = uhe.getMessage(); // host = "hostname: hostname"
+        if (host != null) {
+          val colon = host.indexOf(':');
+          if (colon > 0) {
+            return host.substring(0, colon);
+          }
+        }
+        "UnknownHost"
+    }
+  }
+
+
+  def getHostName() {
+    if (System.getenv("COMPUTERNAME") != null) {
+      return System.getenv("COMPUTERNAME");
+    } else {
+      return getHostNameForLiunx();
     }
   }
 }
