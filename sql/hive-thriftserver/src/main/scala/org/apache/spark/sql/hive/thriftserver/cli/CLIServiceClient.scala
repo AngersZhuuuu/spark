@@ -19,4 +19,29 @@ package org.apache.spark.sql.hive.thriftserver.cli
 
 trait CLIServiceClient extends ICLIService{
 
+  import org.apache.hive.service.auth.HiveAuthFactory
+  import org.apache.hive.service.cli.HiveSQLException
+  import java.util.Collections
+
+  private val DEFAULT_MAX_ROWS = 1000
+
+  @throws[HiveSQLException]
+  def openSession(username: String, password: String): SessionHandle = {
+    openSession(username, password, Collections.emptyMap[String, String])
+  }
+
+  @throws[HiveSQLException]
+  def fetchResults(opHandle: OperationHandle): RowSet = {
+    // TODO: provide STATIC default value
+    fetchResults(opHandle, FetchOrientation.FETCH_NEXT, DEFAULT_MAX_ROWS, FetchType.QUERY_OUTPUT)
+  }
+
+  @throws[HiveSQLException]
+  def getDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, owner: String, renewer: String): String
+
+  @throws[HiveSQLException]
+  def cancelDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit
+
+  @throws[HiveSQLException]
+  def renewDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit
 }

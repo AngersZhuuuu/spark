@@ -44,8 +44,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.CompositeService;
 import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.auth.HiveAuthFactory;
-import org.apache.hive.service.cli.operation.Operation;
-import org.apache.hive.service.cli.session.SessionManager;
 import org.apache.hive.service.cli.thrift.TProtocolVersion;
 import org.apache.hive.service.server.HiveServer2;
 
@@ -189,7 +187,7 @@ public class CLIService extends CompositeService implements ICLIService {
     return sessionHandle;
   }
 
-  public SessionHandle openSession(TProtocolVersion protocol, String username, String password, String ipAddress,
+  public SessionHandle (TPropenSessionotocolVersion protocol, String username, String password, String ipAddress,
       Map<String, String> configuration) throws HiveSQLException {
     SessionHandle sessionHandle = sessionManager.openSession(protocol, username, password, ipAddress, configuration, false, null);
     LOG.debug(sessionHandle + ": openSession()");

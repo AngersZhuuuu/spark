@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver.auth
+package org.apache.spark.sql.hive.thriftserver.cli.operation
 
-class ThriftAuthFactory {
 
+trait TableTypeMapping {
+  /**
+   * Map client's table type name to hive's table type
+   *
+   * @param clientTypeName
+   * @return
+   */
+  def mapToHiveType(clientTypeName: String): String
+
+  /**
+   * Map hive's table type name to client's table type
+   *
+   * @param hiveTypeName
+   * @return
+   */
+  def mapToClientType(hiveTypeName: String): String
+
+  /**
+   * Get all the table types of this mapping
+   *
+   * @return
+   */
+  def getTableTypeNames: Set[String]
 }

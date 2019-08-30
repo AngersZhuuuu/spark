@@ -20,15 +20,17 @@ package org.apache.spark.sql.hive.thriftserver.cli.operation
 import java.util.regex.Pattern
 import java.util.{UUID, List => JList}
 
+import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
-import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetTablesOperation
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.HiveSQLException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
+import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 import scala.collection.JavaConverters._
@@ -45,16 +47,28 @@ import scala.collection.JavaConverters._
  */
 private[hive] class SparkGetTablesOperation(
     sqlContext: SQLContext,
-    parentSession: HiveSession,
+    parentSession: ThriftSession,
     catalogName: String,
     schemaName: String,
     tableName: String,
     tableTypes: JList[String])
-  extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
+  extends SparkMetadataOperation(parentSession, GET_TABLES)
     with SparkMetadataOperationUtils with Logging {
 
   private var statementId: String = _
+  private val RESULT_SET_SCHEMA = new StructType()
+    .add(StructField("TABLE_CAT", StringType))
+    .add(StructField("TABLE_SCHEM", StringType))
+    .add(StructField("TABLE_NAME", StringType))
+    .add(StructField("TABLE_TYPE", StringType))
+    .add(StructField("REMARKS", StringType))
 
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+
+  private val tableTypeMapping: TableTypeMapping = {
+    val tableMappingStr = parentSession.getHiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
+    TableTypeMappingFactory.getTableTypeMapping(tableMappingStr)
+  }
   override def close(): Unit = {
     super.close()
     HiveThriftServer2.listener.onOperationClosed(statementId)
@@ -67,7 +81,7 @@ private[hive] class SparkGetTablesOperation(
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
     val logMsg = s"Listing tables '$cmdStr, tableTypes : $tableTypesStr, tableName : $tableName'"
     logInfo(s"$logMsg with $statementId")
-    setState(OperationState.RUNNING)
+    setState(RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -115,10 +129,10 @@ private[hive] class SparkGetTablesOperation(
           addToRowSet(view.database.orNull, view.table, VIEW.name, None)
         }
       }
-      setState(OperationState.FINISHED)
+      setState(FINISHED)
     } catch {
       case e: HiveSQLException =>
-        setState(OperationState.ERROR)
+        setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
@@ -143,5 +157,19 @@ private[hive] class SparkGetTablesOperation(
     } else {
       rowSet.addRow(rowData)
     }
+  }
+
+  override def getResultSetSchema: StructType = {
+    assertState(FINISHED)
+    RESULT_SET_SCHEMA
+  }
+
+
+  override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
+    assertState(FINISHED)
+    validateDefaultFetchOrientation(orientation)
+    if (orientation == FetchOrientation.FETCH_FIRST)
+      rowSet.setStartOffset(0)
+    rowSet.extractSubset(maxRows.toInt)
   }
 }

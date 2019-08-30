@@ -20,12 +20,12 @@ package org.apache.spark.sql.hive.thriftserver.cli.session
 import java.io.File
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.thrift.TProtocolVersion
+import org.apache.spark.sql.hive.thriftserver.cli.SessionHandle
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationManager
 
-trait ThriftSessionBase extends ThriftSession {
-
-
+trait ThriftSessionBase {
 
   def getProtocolVersion: TProtocolVersion
 
@@ -67,7 +67,7 @@ trait ThriftSessionBase extends ThriftSession {
     */
   def setOperationLogSessionDir(operationLogRootDir: File): Unit
 
-  def getSessionHandle: Nothing
+  def getSessionHandle: SessionHandle
 
   def getUsername: String
 
@@ -75,7 +75,7 @@ trait ThriftSessionBase extends ThriftSession {
 
   def getHiveConf: HiveConf
 
-  def getSessionState: Nothing
+  def getSessionState: SessionState
 
   def getUserName: String
 

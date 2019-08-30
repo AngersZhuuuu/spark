@@ -150,7 +150,7 @@ class LogDivertAppender extends WriterAppender with Logging {
   }
 
 
-  def doAppend(event: Nothing): Unit = {
+  override def doAppend(event: LoggingEvent): Unit = {
     val log = operationManager.getOperationLogByThread
     // Set current layout depending on the verbose/non-verbose mode.
     if (log != null) {
@@ -166,9 +166,9 @@ class LogDivertAppender extends WriterAppender with Logging {
   }
 
   /**
-    * Overrides WriterAppender.subAppend(), which does the real logging. No need
-    * to worry about concurrency since log4j calls this synchronously.
-    */
+   * Overrides WriterAppender.subAppend(), which does the real logging. No need
+   * to worry about concurrency since log4j calls this synchronously.
+   */
   override protected def subAppend(event: LoggingEvent): Unit = {
     super.subAppend(event)
     // That should've gone into our writer. Notify the LogContext.

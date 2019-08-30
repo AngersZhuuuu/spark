@@ -21,13 +21,13 @@ import java.sql.DatabaseMetaData
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
-import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetFunctionsOperation
-import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.{CLIServiceUtils, HiveSQLException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
@@ -43,13 +43,22 @@ import scala.collection.JavaConverters.seqAsJavaListConverter
  */
 private[hive] class SparkGetFunctionsOperation(
     sqlContext: SQLContext,
-    parentSession: HiveSession,
+    parentSession: ThriftSession,
     catalogName: String,
     schemaName: String,
     functionName: String)
-  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName) with Logging {
+  extends SparkMetadataOperation(parentSession, GET_FUNCTIONS) with Logging {
 
   private var statementId: String = _
+  private val RESULT_SET_SCHEMA = new StructType()
+    .add(StructField("FUNCTION_CAT", StringType))
+    .add(StructField("FUNCTION_SCHEM", StringType))
+    .add(StructField("FUNCTION_NAME", StringType))
+    .add(StructField("REMARKS", StringType))
+    .add(StructField("FUNCTION_TYPE", IntegerType))
+    .add(StructField("SPECIFIC_NAME", StringType))
+
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
 
   override def close(): Unit = {
     super.close()
@@ -62,7 +71,7 @@ private[hive] class SparkGetFunctionsOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
     logInfo(s"$logMsg with $statementId")
-    setState(OperationState.RUNNING)
+    setState(RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -102,14 +111,27 @@ private[hive] class SparkGetFunctionsOperation(
             rowSet.addRow(rowData);
         }
       }
-      setState(OperationState.FINISHED)
+      setState(FINISHED)
     } catch {
       case e: HiveSQLException =>
-        setState(OperationState.ERROR)
+        setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)
+  }
+
+  override def getResultSetSchema: StructType = {
+    assertState(FINISHED)
+    RESULT_SET_SCHEMA
+  }
+
+  override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
+    assertState(FINISHED)
+    validateDefaultFetchOrientation(orientation)
+    if (orientation == FetchOrientation.FETCH_FIRST)
+      rowSet.setStartOffset(0)
+    rowSet.extractSubset(maxRows.toInt)
   }
 }

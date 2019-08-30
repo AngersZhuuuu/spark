@@ -20,12 +20,14 @@ package org.apache.spark.sql.hive.thriftserver.cli.operation
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
+import org.apache.hive.service.cli.HiveSQLException
 import org.apache.hive.service.cli.operation.GetCatalogsOperation
-import org.apache.hive.service.cli.session.HiveSession
-import org.apache.hive.service.cli.{HiveSQLException, OperationState}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -36,10 +38,14 @@ import org.apache.spark.util.{Utils => SparkUtils}
  */
 private[hive] class SparkGetCatalogsOperation(
     sqlContext: SQLContext,
-    parentSession: HiveSession)
-  extends GetCatalogsOperation(parentSession) with Logging {
+    parentSession: ThriftSession)
+  extends SparkMetadataOperation(parentSession, GET_CATALOGS) with Logging {
 
   private var statementId: String = _
+  private val RESULT_SET_SCHEMA = new StructType()
+    .add(StructField("TABLE_CAT", StringType))
+
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
 
   override def close(): Unit = {
     super.close()
@@ -50,7 +56,7 @@ private[hive] class SparkGetCatalogsOperation(
     statementId = UUID.randomUUID().toString
     val logMsg = "Listing catalogs"
     logInfo(s"$logMsg with $statementId")
-    setState(OperationState.RUNNING)
+    setState(RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -66,14 +72,27 @@ private[hive] class SparkGetCatalogsOperation(
       if (isAuthV2Enabled) {
         authorizeMetaGets(HiveOperationType.GET_CATALOGS, null)
       }
-      setState(OperationState.FINISHED)
+      setState(FINISHED)
     } catch {
       case e: HiveSQLException =>
-        setState(OperationState.ERROR)
+        setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)
+  }
+
+  override def getResultSetSchema: StructType = {
+    assertState(FINISHED)
+    RESULT_SET_SCHEMA
+  }
+
+  override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
+    assertState(FINISHED)
+    validateDefaultFetchOrientation(orientation)
+    if (orientation == FetchOrientation.FETCH_FIRST)
+      rowSet.setStartOffset(0)
+    rowSet.extractSubset(maxRows.toInt)
   }
 }

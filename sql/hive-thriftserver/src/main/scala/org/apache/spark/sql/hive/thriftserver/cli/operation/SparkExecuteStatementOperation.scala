@@ -196,7 +196,7 @@ private[hive] class SparkExecuteStatementOperation(
       try {
         // This submit blocks if no background threads are available to run this operation
         val backgroundHandle =
-          parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
+          parentSession.getSessionManager.submitBackgroundOperation(backgroundOperation)
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>

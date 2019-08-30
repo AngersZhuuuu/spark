@@ -23,24 +23,18 @@ import java.util.concurrent.Future
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.hadoop.hive.ql.session.OperationLog
-import org.apache.hive.service.cli.FetchOrientation
 import org.apache.hive.service.cli.thrift.TProtocolVersion
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.RuntimeConfig
-import org.apache.spark.sql.hive.thriftserver.cli._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.hive.thriftserver.Logging
-import org.apache.spark.sql.hive.thriftserver.cli.operation.FetchOrientation
-import org.apache.spark.sql.hive.thriftserver.conf.KyuubiConf.OPERATION_IDLE_TIMEOUT
-import org.apache.spark.sql.hive.thriftserver.exception.KyuubiSQLException
-import org.apache.spark.sql.hive.thriftserver.session.KyuubiSession
-import org.apache.spark.sql.hive.thriftserver.utils.KyuubiSparkUtil
-import org.apache.spark.sql.types.StructType
 
-abstract class Operation(session: KyuubiSession, opType: OperationType, runInBackground: Boolean) extends Logging {
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
+
+abstract class Operation(session: ThriftSession, opType: OperationType, runInBackground: Boolean) extends Logging {
   private[this] var _state: OperationState = INITIALIZED
-  private[this] var _opHandle: OperationHandle = new OperationHandle(opType, session.getProtocolVersion);
-  private[this] var _conf: RuntimeConfig = session.sparkSession.conf
+  private[this] val _opHandle: OperationHandle = new OperationHandle(opType, session.getProtocolVersion)
+  private[this] var _conf: HiveConf = session.getHiveConf
 
   protected var _hasResultSet = false
   protected var _operationException: SparkThriftServerSQLException = _
@@ -49,7 +43,7 @@ abstract class Operation(session: KyuubiSession, opType: OperationType, runInBac
   protected var _operationLog: OperationLog = _
   protected var _isOperationLogEnabled = false
 
-  private var _operationTimeout: Long = KyuubiSparkUtil.timeStringAsMs(_conf.get(OPERATION_IDLE_TIMEOUT.key))
+  private var _operationTimeout: Long = Utils.timeStringAsMs(_conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT))
   private var _lastAccessTime = System.currentTimeMillis()
 
   protected val DEFAULT_FETCH_ORIENTATION_SET: Set[FetchOrientation] =
@@ -64,13 +58,13 @@ abstract class Operation(session: KyuubiSession, opType: OperationType, runInBac
 
   def shouldRunAsync: Boolean = _runAsync
 
-  def setConfiguration(configuration: SQLConf): Unit = {
-    this._conf = new RuntimeConfig(configuration)
+  def setConfiguration(conf: HiveConf): Unit = {
+    this._conf = conf
   }
 
-  def getConfiguration: RuntimeConfig = _conf
+  def getConfiguration: HiveConf = _conf
 
-  def getSession: KyuubiSession = session
+  def getSession: ThriftSession = session
 
   def getHandle: OperationHandle = _opHandle
 
@@ -99,7 +93,9 @@ abstract class Operation(session: KyuubiSession, opType: OperationType, runInBac
   }
 
   def isTimedOut(current: Long): Boolean = {
-    if (_operationTimeout == 0) return false
+    if (_operationTimeout == 0) {
+      return false
+    }
     if (_operationTimeout > 0) { // check only when it's in terminal state
       return _state.isTerminal && _lastAccessTime + _operationTimeout <= current
     }
@@ -114,13 +110,13 @@ abstract class Operation(session: KyuubiSession, opType: OperationType, runInBac
     this._operationTimeout = operationTimeout
   }
 
-  protected def setOperationException(opEx: KyuubiSQLException): Unit = {
+  protected def setOperationException(opEx: SparkThriftServerSQLException): Unit = {
     this._operationException = opEx
   }
 
-  @throws[KyuubiSQLException]
+  @throws[SparkThriftServerSQLException]
   protected final def assertState(state: OperationState): Unit = {
-    if (this._state ne state) throw new KyuubiSQLException("Expected state " + state + ", but found " + this._state)
+    if (this._state ne state) throw new SparkThriftServerSQLException("Expected state " + state + ", but found " + this._state)
     this._lastAccessTime = System.currentTimeMillis
   }
 

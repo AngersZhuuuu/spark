@@ -40,7 +40,7 @@ private[thriftserver] class SparkSQLOperationManager()
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
   val sessionToActivePool = new ConcurrentHashMap[SessionHandle, String]()
-  val sessionToContexts = new ConcurrentHashMap[SessionHandle, SQLContext]()
+
 
   override def newExecuteStatementOperation(
       parentSession: HiveSession,

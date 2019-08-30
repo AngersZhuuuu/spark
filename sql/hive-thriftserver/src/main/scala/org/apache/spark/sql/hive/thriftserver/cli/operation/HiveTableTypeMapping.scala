@@ -17,21 +17,15 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli.operation
 
-object TableTypeMappingFactory {
+import org.apache.hadoop.hive.metastore.TableType
 
-  object TableTypeMappings extends Enumeration {
-    type TableTypeMappings = Value
-    val HIVE, CLASSIC = Value
+class HiveTableTypeMapping extends TableTypeMapping {
+
+  def mapToHiveType(clientTypeName: String): String = clientTypeName
+
+  def mapToClientType(hiveTypeName: String): String = hiveTypeName
+
+  def getTableTypeNames: Set[String] = {
+    TableType.values.map(_.toString).toSet
   }
-
-  private val hiveTableTypeMapping = new HiveTableTypeMapping
-  private val classicTableTypeMapping = new ClassicTableTypeMapping
-
-  def getTableTypeMapping(mappingType: String): TableTypeMapping =
-    if (TableTypeMappings.CLASSIC.toString.equalsIgnoreCase(mappingType)) {
-      classicTableTypeMapping
-    } else {
-      hiveTableTypeMapping
-    }
-
 }
