@@ -38,9 +38,6 @@ import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hive.service.CompositeService;
 import org.apache.hive.service.cli.CLIService;
-import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService;
-import org.apache.hive.service.cli.thrift.ThriftCLIService;
-import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
 
 import org.apache.spark.util.ShutdownHookManager;
 

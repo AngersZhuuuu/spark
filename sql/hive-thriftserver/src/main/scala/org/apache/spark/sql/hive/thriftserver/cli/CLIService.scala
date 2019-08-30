@@ -85,12 +85,17 @@ class CLIService(hiveServer2: HiveServer2)
       hiveConf.getVar(ConfVars.HIVE_SERVER2_BUILTIN_UDF_BLACKLIST))
   }
 
+  def getServiceUGI: UserGroupInformation = this.serviceUGI
+
+  def getHttpUGI: UserGroupInformation = this.httpUGI
+
+
   override def openSession(protocol: TProtocolVersion,
                            username: String,
                            password: String,
                            ipAddress: String,
                            configuration: Predef.Map[String, String]): SessionHandle = {
-    val sessionHandle: SessionHandle = sessionManager.openSession(protocol, username, password, ipAddress, configuration, false, null)
+    val sessionHandle = sessionManager.openSession(protocol, username, password, ipAddress, configuration, false, null)
     LOG.debug(sessionHandle + ": openSession()")
     return sessionHandle
   }

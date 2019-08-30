@@ -46,6 +46,7 @@ import org.apache.thrift.transport._
 
 
 class HiveAuthFactory extends Logging {
+
   import HiveAuthFactory._
 
   private var saslServer: HadoopThriftAuthBridge.Server = null
@@ -175,71 +176,6 @@ class HiveAuthFactory extends Logging {
     new TSocket(host, port, loginTimeout)
   }
 
-  @throws[TTransportException]
-  def getSSLSocket(host: String, port: Int, loginTimeout: Int): TTransport = {
-    TSSLTransportFactory.getClientSocket(host, port, loginTimeout)
-  }
-
-  @throws[TTransportException]
-  def getSSLSocket(host: String,
-                   port: Int,
-                   loginTimeout: Int,
-                   trustStorePath: String,
-                   trustStorePassWord: String): TTransport = {
-    val params = new TSSLTransportFactory.TSSLTransportParameters()
-    params.setTrustStore(trustStorePath, trustStorePassWord)
-    params.requireClientAuth(true)
-    TSSLTransportFactory.getClientSocket(host, port, loginTimeout, params)
-  }
-
-  @throws[TTransportException]
-  def getServerSocket(hiveHost: String, portNum: Int): TServerSocket = {
-    var serverAddress: InetSocketAddress = null
-    if (hiveHost == null || hiveHost.isEmpty) { // Wildcard bind
-      serverAddress = new InetSocketAddress(portNum)
-    } else {
-      serverAddress = new InetSocketAddress(hiveHost, portNum)
-    }
-    new TServerSocket(serverAddress)
-  }
-
-  @throws[TTransportException]
-  @throws[UnknownHostException]
-  def getServerSSLSocket(hiveHost: String,
-                         portNum: Int,
-                         keyStorePath: String,
-                         keyStorePassWord: String,
-                         sslVersionBlacklist: util.List[String]): TServerSocket = {
-    val params: TSSLTransportFactory.TSSLTransportParameters = new TSSLTransportFactory.TSSLTransportParameters()
-    params.setKeyStore(keyStorePath, keyStorePassWord)
-    var serverAddress: InetSocketAddress = null
-    if (hiveHost == null || hiveHost.isEmpty) {
-      serverAddress = new InetSocketAddress(portNum)
-    } else {
-      serverAddress = new InetSocketAddress(hiveHost, portNum)
-    }
-    val thriftServerSocket = TSSLTransportFactory.getServerSocket(portNum, 0, serverAddress.getAddress, params)
-    if (thriftServerSocket.getServerSocket.isInstanceOf[SSLServerSocket]) {
-      val sslVersionBlacklistLocal = new util.ArrayList[String]
-      import scala.collection.JavaConversions._
-      for (sslVersion <- sslVersionBlacklist) {
-        sslVersionBlacklistLocal.add(sslVersion.trim.toLowerCase(Locale.ROOT))
-      }
-      val sslServerSocket = thriftServerSocket.getServerSocket.asInstanceOf[SSLServerSocket]
-      val enabledProtocols = new util.ArrayList[String]
-      for (protocol <- sslServerSocket.getEnabledProtocols) {
-        if (sslVersionBlacklistLocal.contains(protocol.toLowerCase(Locale.ROOT))) {
-          logDebug("Disabling SSL Protocol: " + protocol)
-        } else {
-          enabledProtocols.add(protocol)
-        }
-      }
-      sslServerSocket.setEnabledProtocols(enabledProtocols.toArray(new Array[String](0)))
-      logInfo("SSL Server Socket Enabled Protocols: " + util.Arrays.toString(sslServerSocket.getEnabledProtocols()))
-    }
-    thriftServerSocket
-  }
-
   // retrieve delegation token for the given user
   @throws[SparkThriftServerSQLException]
   def getDelegationToken(owner: String, renewer: String): String = {
@@ -319,7 +255,7 @@ class HiveAuthFactory extends Logging {
   }
 }
 
-object HiveAuthFactory {
+object HiveAuthFactory extends Logging {
   val HS2_PROXY_USER = "hive.server2.proxy.user"
   val HS2_CLIENT_TOKEN = "hiveserver2ClientToken"
 
@@ -341,5 +277,70 @@ object HiveAuthFactory {
       case e: IOException =>
         throw new SparkThriftServerSQLException("Failed to validate proxy privilege of " + realUser + " for " + proxyUser, "08S01", e)
     }
+  }
+
+  @throws[TTransportException]
+  def getSSLSocket(host: String, port: Int, loginTimeout: Int): TTransport = {
+    TSSLTransportFactory.getClientSocket(host, port, loginTimeout)
+  }
+
+  @throws[TTransportException]
+  def getSSLSocket(host: String,
+                   port: Int,
+                   loginTimeout: Int,
+                   trustStorePath: String,
+                   trustStorePassWord: String): TTransport = {
+    val params = new TSSLTransportFactory.TSSLTransportParameters()
+    params.setTrustStore(trustStorePath, trustStorePassWord)
+    params.requireClientAuth(true)
+    TSSLTransportFactory.getClientSocket(host, port, loginTimeout, params)
+  }
+
+  @throws[TTransportException]
+  def getServerSocket(hiveHost: String, portNum: Int): TServerSocket = {
+    var serverAddress: InetSocketAddress = null
+    if (hiveHost == null || hiveHost.isEmpty) { // Wildcard bind
+      serverAddress = new InetSocketAddress(portNum)
+    } else {
+      serverAddress = new InetSocketAddress(hiveHost, portNum)
+    }
+    new TServerSocket(serverAddress)
+  }
+
+  @throws[TTransportException]
+  @throws[UnknownHostException]
+  def getServerSSLSocket(hiveHost: String,
+                         portNum: Int,
+                         keyStorePath: String,
+                         keyStorePassWord: String,
+                         sslVersionBlacklist: util.List[String]): TServerSocket = {
+    val params: TSSLTransportFactory.TSSLTransportParameters = new TSSLTransportFactory.TSSLTransportParameters()
+    params.setKeyStore(keyStorePath, keyStorePassWord)
+    var serverAddress: InetSocketAddress = null
+    if (hiveHost == null || hiveHost.isEmpty) {
+      serverAddress = new InetSocketAddress(portNum)
+    } else {
+      serverAddress = new InetSocketAddress(hiveHost, portNum)
+    }
+    val thriftServerSocket = TSSLTransportFactory.getServerSocket(portNum, 0, serverAddress.getAddress, params)
+    if (thriftServerSocket.getServerSocket.isInstanceOf[SSLServerSocket]) {
+      val sslVersionBlacklistLocal = new util.ArrayList[String]
+      import scala.collection.JavaConversions._
+      for (sslVersion <- sslVersionBlacklist) {
+        sslVersionBlacklistLocal.add(sslVersion.trim.toLowerCase(Locale.ROOT))
+      }
+      val sslServerSocket = thriftServerSocket.getServerSocket.asInstanceOf[SSLServerSocket]
+      val enabledProtocols = new util.ArrayList[String]
+      for (protocol <- sslServerSocket.getEnabledProtocols) {
+        if (sslVersionBlacklistLocal.contains(protocol.toLowerCase(Locale.ROOT))) {
+          logDebug("Disabling SSL Protocol: " + protocol)
+        } else {
+          enabledProtocols.add(protocol)
+        }
+      }
+      sslServerSocket.setEnabledProtocols(enabledProtocols.toArray(new Array[String](0)))
+      logInfo("SSL Server Socket Enabled Protocols: " + util.Arrays.toString(sslServerSocket.getEnabledProtocols()))
+    }
+    thriftServerSocket
   }
 }

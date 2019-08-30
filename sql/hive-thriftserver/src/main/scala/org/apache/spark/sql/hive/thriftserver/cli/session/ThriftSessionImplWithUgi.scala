@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.thriftserver.cli.session
 
 import java.io.IOException
 
-import org.apache.commons.logging.{Log, LogFactory}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
@@ -88,9 +87,9 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
   }
 
   /**
-    * Close the file systems for the session and remove it from the FileSystem cache.
-    * Cancel the session's delegation token and close the metastore connection
-    */
+   * Close the file systems for the session and remove it from the FileSystem cache.
+   * Cancel the session's delegation token and close the metastore connection
+   */
   @throws[SparkThriftServerSQLException]
   override def close(): Unit = {
     try {
@@ -111,7 +110,7 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
     * save the token string and set the token.signature in hive conf. The metastore client uses
     * this token.signature to determine where to use kerberos or delegation token
     *
-    * @throws HiveException
+    * @throws SparkThriftServerSQLException
     * @throws IOException
     */
   @throws[SparkThriftServerSQLException]
