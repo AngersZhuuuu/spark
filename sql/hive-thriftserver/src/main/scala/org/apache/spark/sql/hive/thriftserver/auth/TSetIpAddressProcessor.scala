@@ -83,7 +83,7 @@ class TSetIpAddressProcessor[I <: Iface](val iface: Iface)
     var tp = transport
     while (tp != null) {
       if (transport.isInstanceOf[TSaslServerTransport]) {
-        tp = transport.asInstanceOf[TSaslClientTransport].getUnderlyingTransport
+        tp = transport.asInstanceOf[TSaslServerTransport].getUnderlyingTransport
       }
       if (transport.isInstanceOf[TSaslClientTransport]) {
         tp = transport.asInstanceOf[TSaslClientTransport].getUnderlyingTransport

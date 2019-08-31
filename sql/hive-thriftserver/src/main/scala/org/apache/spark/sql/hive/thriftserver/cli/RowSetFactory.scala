@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver.cli
 
 import org.apache.hive.service.cli.thrift.TProtocolVersion
-import org.apache.hive.service.rpc.thrift.TProtocolVersion._
+import org.apache.hive.service.cli.thrift.TProtocolVersion._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
 

@@ -56,7 +56,7 @@ class HiveAuthFactory extends Logging {
 
   def this(hiveConf: HiveConf) {
     this()
-    this.conf = conf
+    this.conf = hiveConf
     transportMode = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
     authTypeStr = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_AUTHENTICATION)
 
@@ -354,7 +354,7 @@ object HiveAuthFactory extends Logging {
       !Objects.equals(keytab, getKeytabFromUgi)
   }
 
-  private def getKeytabFromUgi = synchronized {
+  private def getKeytabFromUgi: String = classOf[UserGroupInformation].synchronized {
     try {
       if (keytabFile != null) {
         keytabFile.get(null).asInstanceOf[String]

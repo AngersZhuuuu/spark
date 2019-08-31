@@ -52,6 +52,7 @@ private[hive] class OperationManager
     } else {
       logDebug("Operation level logging is turned off")
     }
+    super.init(hiveConf)
   }
 
   override def start(): Unit = {
