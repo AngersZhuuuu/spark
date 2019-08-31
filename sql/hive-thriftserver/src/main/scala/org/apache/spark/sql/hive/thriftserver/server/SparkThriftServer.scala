@@ -6,12 +6,11 @@ import org.apache.hadoop.hive.common.LogUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hive.common.util.HiveStringUtils
-import org.apache.hive.service.CompositeService
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.thriftserver.{CompositeService, SparkSQLEnv}
 import org.apache.spark.sql.hive.thriftserver.cli.CLIService
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.{ThriftBinaryCLIService, ThriftCLIService, ThriftHttpCLIService}
+import org.apache.spark.sql.hive.thriftserver.{CompositeService, SparkSQLEnv}
 import org.apache.spark.util.ShutdownHookManager
 
 import scala.collection.JavaConverters._
