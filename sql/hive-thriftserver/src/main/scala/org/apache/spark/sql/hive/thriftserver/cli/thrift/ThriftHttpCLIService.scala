@@ -88,13 +88,14 @@ class ThriftHttpCLIService(cliService: CLIService)
         connectionFactories = Array[ConnectionFactory](new HttpConnectionFactory)
       }
       val connector: ServerConnector =
-        new ServerConnector(httpServer,
-          null, // Call this full constructor to set this, which forces daemon threads:
-          new ScheduledExecutorScheduler("HiveServer2-HttpHandler-JettyScheduler", true),
+        new ServerConnector(
+          httpServer,
+          null,
+          new ScheduledExecutorScheduler("SparkThriftServer-HttpHandler-JettyScheduler", true),
           null,
           -1,
           -1,
-          connectionFactories)
+          connectionFactories: _*)
       connector.setPort(portNum)
       // Linux:yes, Windows:no
       connector.setReuseAddress(!Shell.WINDOWS)

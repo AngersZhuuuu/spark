@@ -152,15 +152,17 @@ object SparkThriftServer extends Logging {
     final private val options = new Options
     private var commandLine: CommandLine = null
     final private val debugMessage = new StringBuilder
-
-    options.addOption(OptionBuilder
-      .withValueSeparator
-      .hasArgs(2)
-      .withArgName("property=value")
-      .withLongOpt("hiveconf")
-      .withDescription("Use value for given property")
-      .create)
-    options.addOption(new Option("H", "help", false, "Print help information"))
+    OptionBuilder.withValueSeparator
+    OptionBuilder.hasArgs(2)
+    OptionBuilder.withArgName("property=value")
+    OptionBuilder.withLongOpt("hiveconf")
+    OptionBuilder.withDescription("Use value for given property")
+    options.addOption(OptionBuilder.create)
+    options.addOption(
+      new Option("H",
+        "help",
+        false,
+        "Print help information"))
 
 
     def parse(argv: Array[String]): ServerOptionsProcessorResponse = {
