@@ -29,6 +29,7 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.AbstractService
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext}
@@ -173,6 +174,39 @@ private[hive] class OperationManager
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetFunctionsOperation with session=$parentSession.")
     operation
+  }
+
+  def newGetPrimaryKeysOperation(parentSession: ThriftSession,
+                                 catalogName: String,
+                                 schemaName: String,
+                                 tableName: String): Operation = {
+    //    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    //    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+    //      " initialized or had already closed.")
+    //
+    //    val operation: Operation = new Nothing(sqlContext, parentSession, catalogName, schemaName, tableName)
+    //    handleToOperation.put(operation.getHandle, operation)
+    //    logDebug(s"Created GetPrimaryKeysOperation with session=$parentSession.")
+    //    operation
+    throw new SparkThriftServerSQLException("GetFunctionsOperation is not supported yet")
+  }
+
+  def newGetCrossReferenceOperation(parentSession: ThriftSession,
+                                    primaryCatalog: String,
+                                    primarySchema: String,
+                                    primaryTable: String,
+                                    foreignCatalog: String,
+                                    foreignSchema: String,
+                                    foreignTable: String): Operation = {
+    //    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    //    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+    //      " initialized or had already closed.")
+    //
+    //    val operation: Operation = new Nothing(sqlContext, parentSession, primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema, foreignTable)
+    //    handleToOperation.put(operation.getHandle, operation)
+    //    logDebug(s"Created GetCrossReferenceOperation with session=$parentSession.")
+    //    operation
+    throw new SparkThriftServerSQLException("GetPrimaryKeysOperation is not supported yet")
   }
 
   def setConfMap(conf: SQLConf, confMap: java.util.Map[String, String]): Unit = {

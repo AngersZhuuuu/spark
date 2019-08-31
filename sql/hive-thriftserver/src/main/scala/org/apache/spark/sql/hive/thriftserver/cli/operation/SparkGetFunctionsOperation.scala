@@ -21,13 +21,14 @@ import java.sql.DatabaseMetaData
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
-import org.apache.hive.service.cli.CLIServiceUtils
+import org.apache.hive.service.cli.thrift.CLIServiceUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
@@ -41,12 +42,11 @@ import scala.collection.JavaConverters.seqAsJavaListConverter
  * @param schemaName    database name, null or a concrete database name
  * @param functionName  function name pattern
  */
-private[hive] class SparkGetFunctionsOperation(
-                                                sqlContext: SQLContext,
-                                                parentSession: ThriftSession,
-                                                catalogName: String,
-                                                schemaName: String,
-                                                functionName: String)
+private[hive] class SparkGetFunctionsOperation(sqlContext: SQLContext,
+                                               parentSession: ThriftSession,
+                                               catalogName: String,
+                                               schemaName: String,
+                                               functionName: String)
   extends SparkMetadataOperation(parentSession, GET_FUNCTIONS) with Logging {
 
   private var statementId: String = _

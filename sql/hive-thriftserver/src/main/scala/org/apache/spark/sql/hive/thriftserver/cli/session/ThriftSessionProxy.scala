@@ -22,7 +22,7 @@ import java.security.{PrivilegedActionException, PrivilegedExceptionAction}
 
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.cli.SparkThriftServerSQLException
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 
 class ThriftSessionProxy extends InvocationHandler with Logging {
   private var _base: ThriftSession = null

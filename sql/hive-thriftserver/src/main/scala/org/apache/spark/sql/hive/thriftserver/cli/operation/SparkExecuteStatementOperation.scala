@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver.cli.operation
 import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.RejectedExecutionException
-import java.util.{Arrays, UUID, Map => JMap}
+import java.util.{UUID, Map => JMap}
 
 import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.hadoop.hive.shims.Utils
@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.hive.thriftserver.{HiveThriftServer2, cli}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._

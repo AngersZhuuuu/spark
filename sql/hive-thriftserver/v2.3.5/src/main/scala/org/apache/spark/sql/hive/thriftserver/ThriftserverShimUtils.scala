@@ -20,12 +20,12 @@ package org.apache.spark.sql.hive.thriftserver
 import java.security.AccessController
 
 import scala.collection.JavaConverters._
-
 import org.apache.hadoop.hive.ql.exec.AddToClassPathAction
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.serde2.thrift.Type
-import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema}
+import org.apache.hive.service.cli.thrift.Type
 import org.apache.hive.service.rpc.thrift.TProtocolVersion._
+import org.apache.spark.sql.hive.thriftserver.cli.{RowSet, RowSetFactory}
+import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
 
 /**
@@ -33,32 +33,31 @@ import org.slf4j.LoggerFactory
  */
 private[thriftserver] object ThriftserverShimUtils {
 
-  private[thriftserver] type TProtocolVersion = org.apache.hive.service.rpc.thrift.TProtocolVersion
-  private[thriftserver] type Client = org.apache.hive.service.rpc.thrift.TCLIService.Client
-  private[thriftserver] type TOpenSessionReq = org.apache.hive.service.rpc.thrift.TOpenSessionReq
-  private[thriftserver] type TGetSchemasReq = org.apache.hive.service.rpc.thrift.TGetSchemasReq
-  private[thriftserver] type TGetTablesReq = org.apache.hive.service.rpc.thrift.TGetTablesReq
-  private[thriftserver] type TGetColumnsReq = org.apache.hive.service.rpc.thrift.TGetColumnsReq
-  private[thriftserver] type TGetInfoReq = org.apache.hive.service.rpc.thrift.TGetInfoReq
+  private[thriftserver] type TProtocolVersion = org.apache.hive.service.cli.thrift.TProtocolVersion
+  private[thriftserver] type Client = org.apache.hive.service.cli.thrift.TCLIService.Client
+  private[thriftserver] type TOpenSessionReq = org.apache.hive.service.cli.thrift.TOpenSessionReq
+  private[thriftserver] type TGetSchemasReq = org.apache.hive.service.cli.thrift.TGetSchemasReq
+  private[thriftserver] type TGetTablesReq = org.apache.hive.service.cli.thrift.TGetTablesReq
+  private[thriftserver] type TGetColumnsReq = org.apache.hive.service.cli.thrift.TGetColumnsReq
+  private[thriftserver] type TGetInfoReq = org.apache.hive.service.cli.thrift.TGetInfoReq
   private[thriftserver] type TExecuteStatementReq =
-    org.apache.hive.service.rpc.thrift.TExecuteStatementReq
+    org.apache.hive.service.cli.thrift.TExecuteStatementReq
 
   private[thriftserver] def getConsole: SessionState.LogHelper = {
     val LOG = LoggerFactory.getLogger(classOf[SparkSQLCLIDriver])
     new SessionState.LogHelper(LOG)
   }
 
-  private[thriftserver] def resultRowSet(
-      getResultSetSchema: TableSchema,
-      getProtocolVersion: TProtocolVersion): RowSet = {
-    RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
+  private[thriftserver] def resultRowSet(getResultSetSchema: StructType,
+                                         getProtocolVersion: TProtocolVersion): RowSet = {
+    RowSetFactory.create(getResultSetSchema, getProtocolVersion)
   }
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
   private[thriftserver] def addToClassPath(
-      loader: ClassLoader,
-      auxJars: Array[String]): ClassLoader = {
+                                            loader: ClassLoader,
+                                            auxJars: Array[String]): ClassLoader = {
     val addAction = new AddToClassPathAction(loader, auxJars.toList.asJava)
     AccessController.doPrivileged(addAction)
   }

@@ -22,12 +22,13 @@ import java.util.UUID
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**

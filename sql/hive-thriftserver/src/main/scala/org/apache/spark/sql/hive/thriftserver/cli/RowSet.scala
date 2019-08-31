@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver.cli
 
 import org.apache.hive.service.cli.thrift.TRowSet
-
 import org.apache.spark.sql.Row
 
 trait RowSet {

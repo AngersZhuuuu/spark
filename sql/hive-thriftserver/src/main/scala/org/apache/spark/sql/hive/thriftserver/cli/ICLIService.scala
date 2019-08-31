@@ -19,28 +19,39 @@ package org.apache.spark.sql.hive.thriftserver.cli
 
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 
 
 trait ICLIService {
 
   @throws[SparkThriftServerSQLException]
-  def openSession(username: String, password: String, configuration: Map[String, String]): SessionHandle
+  def openSession(username: String,
+                  password: String,
+                  configuration: Map[String, String]): SessionHandle
 
   @throws[SparkThriftServerSQLException]
-  def openSessionWithImpersonation(username: String, password: String, configuration: Map[String, String], delegationToken: String): SessionHandle
+  def openSessionWithImpersonation(username: String,
+                                   password: String,
+                                   configuration: Map[String, String],
+                                   delegationToken: String): SessionHandle
 
   @throws[SparkThriftServerSQLException]
   def closeSession(sessionHandle: SessionHandle): Unit
 
   @throws[SparkThriftServerSQLException]
-  def getInfo(sessionHandle: SessionHandle, infoType: GetInfoType): GetInfoValue
+  def getInfo(sessionHandle: SessionHandle,
+              infoType: GetInfoType): GetInfoValue
 
   @throws[SparkThriftServerSQLException]
-  def executeStatement(sessionHandle: SessionHandle, statement: String, confOverlay: Map[String, String]): OperationHandle
+  def executeStatement(sessionHandle: SessionHandle,
+                       statement: String,
+                       confOverlay: Map[String, String]): OperationHandle
 
   @throws[SparkThriftServerSQLException]
-  def executeStatementAsync(sessionHandle: SessionHandle, statement: String, confOverlay: Map[String, String]): OperationHandle
+  def executeStatementAsync(sessionHandle: SessionHandle,
+                            statement: String,
+                            confOverlay: Map[String, String]): OperationHandle
 
   @throws[SparkThriftServerSQLException]
   def getTypeInfo(sessionHandle: SessionHandle): OperationHandle
@@ -49,19 +60,47 @@ trait ICLIService {
   def getCatalogs(sessionHandle: SessionHandle): OperationHandle
 
   @throws[SparkThriftServerSQLException]
-  def getSchemas(sessionHandle: SessionHandle, catalogName: String, schemaName: String): OperationHandle
+  def getSchemas(sessionHandle: SessionHandle,
+                 catalogName: String,
+                 schemaName: String): OperationHandle
 
   @throws[SparkThriftServerSQLException]
-  def getTables(sessionHandle: SessionHandle, catalogName: String, schemaName: String, tableName: String, tableTypes: List[String]): OperationHandle
+  def getTables(sessionHandle: SessionHandle,
+                catalogName: String,
+                schemaName: String,
+                tableName: String,
+                tableTypes: List[String]): OperationHandle
 
   @throws[SparkThriftServerSQLException]
   def getTableTypes(sessionHandle: SessionHandle): OperationHandle
 
   @throws[SparkThriftServerSQLException]
-  def getColumns(sessionHandle: SessionHandle, catalogName: String, schemaName: String, tableName: String, columnName: String): OperationHandle
+  def getColumns(sessionHandle: SessionHandle,
+                 catalogName: String,
+                 schemaName: String,
+                 tableName: String,
+                 columnName: String): OperationHandle
 
   @throws[SparkThriftServerSQLException]
-  def getFunctions(sessionHandle: SessionHandle, catalogName: String, schemaName: String, functionName: String): OperationHandle
+  def getFunctions(sessionHandle: SessionHandle,
+                   catalogName: String,
+                   schemaName: String,
+                   functionName: String): OperationHandle
+
+  @throws[SparkThriftServerSQLException]
+  def getPrimaryKeys(sessionHandle: SessionHandle,
+                     catalog: String,
+                     schema: String,
+                     table: String): OperationHandle
+
+  @throws[SparkThriftServerSQLException]
+  def getCrossReference(sessionHandle: SessionHandle,
+                        primaryCatalog: String,
+                        primarySchema: String,
+                        primaryTable: String,
+                        foreignCatalog: String,
+                        foreignSchema: String,
+                        foreignTable: String): OperationHandle
 
   @throws[SparkThriftServerSQLException]
   def getOperationStatus(opHandle: OperationHandle): OperationStatus

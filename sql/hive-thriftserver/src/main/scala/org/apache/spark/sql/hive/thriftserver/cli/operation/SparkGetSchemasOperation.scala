@@ -21,13 +21,14 @@ import java.util.UUID
 import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hive.service.cli.CLIServiceUtils
+import org.apache.hive.service.cli.thrift.CLIServiceUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -38,11 +39,10 @@ import org.apache.spark.util.{Utils => SparkUtils}
  * @param catalogName   catalog name. null if not applicable.
  * @param schemaName    database name, null or a concrete database name
  */
-private[hive] class SparkGetSchemasOperation(
-                                              sqlContext: SQLContext,
-                                              parentSession: ThriftSession,
-                                              catalogName: String,
-                                              schemaName: String)
+private[hive] class SparkGetSchemasOperation(sqlContext: SQLContext,
+                                             parentSession: ThriftSession,
+                                             catalogName: String,
+                                             schemaName: String)
   extends SparkMetadataOperation(parentSession, GET_SCHEMAS) with Logging {
 
   private var statementId: String = _

@@ -23,8 +23,9 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.cli.{CLOSED, OperationType, SparkThriftServerSQLException}
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.cli.{CLOSED, OperationType}
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 
 

@@ -22,16 +22,17 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
-import org.apache.hive.service.cli.CLIServiceUtils
+import org.apache.hive.service.cli.thrift.CLIServiceUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
@@ -46,13 +47,12 @@ import scala.collection.JavaConverters.seqAsJavaListConverter
  * @param tableName     table name
  * @param columnName    column name
  */
-private[hive] class SparkGetColumnsOperation(
-                                              sqlContext: SQLContext,
-                                              parentSession: ThriftSession,
-                                              catalogName: String,
-                                              schemaName: String,
-                                              tableName: String,
-                                              columnName: String)
+private[hive] class SparkGetColumnsOperation(sqlContext: SQLContext,
+                                             parentSession: ThriftSession,
+                                             catalogName: String,
+                                             schemaName: String,
+                                             tableName: String,
+                                             columnName: String)
   extends SparkMetadataOperation(parentSession, GET_COLUMNS)
     with Logging {
 

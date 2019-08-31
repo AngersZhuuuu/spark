@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver.cli
 
 import java.util.UUID
 
-import org.apache.hive.service.cli.thrift.{TProtocolVersion, TSessionHandle}
+import org.apache.hive.service.cli.thrift._
 
 class SessionHandle private(handleId: HandleIdentifier, protocol: TProtocolVersion)
   extends Handle(handleId) {

@@ -33,6 +33,7 @@ import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.hive.thriftserver.{AbstractService, ServiceUtils}
 import org.apache.spark.sql.types.StructType
 import org.apache.thrift.TException
@@ -47,6 +48,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     with TCLIService.Iface
     with Runnable
     with Logging {
+
+
   private val OK_STATUS = new TStatus(TStatusCode.SUCCESS_STATUS)
   protected var hiveAuthFactory: HiveAuthFactory = new HiveAuthFactory()
 
@@ -543,6 +546,46 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     resp
   }
 
+  override def GetPrimaryKeys(tGetPrimaryKeysReq: TGetPrimaryKeysReq): TGetPrimaryKeysResp = {
+    val resp = new TGetPrimaryKeysResp
+    try {
+      val opHandle: OperationHandle =
+        cliService.getPrimaryKeys(new SessionHandle(tGetPrimaryKeysReq.getSessionHandle),
+          tGetPrimaryKeysReq.getCatalogName,
+          tGetPrimaryKeysReq.getSchemaName,
+          tGetPrimaryKeysReq.getTableName)
+      resp.setOperationHandle(opHandle.toTOperationHandle)
+      resp.setStatus(OK_STATUS)
+    } catch {
+      case e: Exception =>
+        logWarning("Error getting functions: ", e)
+        resp.setStatus(SparkThriftServerSQLException.toTStatus(e))
+    }
+    resp
+  }
+
+  override def GetCrossReference(tGetCrossReferenceReq: TGetCrossReferenceReq): TGetCrossReferenceResp = {
+    val resp = new TGetCrossReferenceResp
+    try {
+      val opHandle =
+        cliService.getCrossReference(
+          new SessionHandle(tGetCrossReferenceReq.getSessionHandle),
+          tGetCrossReferenceReq.getParentCatalogName,
+          tGetCrossReferenceReq.getParentSchemaName,
+          tGetCrossReferenceReq.getParentTableName,
+          tGetCrossReferenceReq.getForeignCatalogName,
+          tGetCrossReferenceReq.getForeignSchemaName,
+          tGetCrossReferenceReq.getForeignTableName)
+      resp.setOperationHandle(opHandle.toTOperationHandle)
+      resp.setStatus(OK_STATUS)
+    } catch {
+      case e: Exception =>
+        logInfo("Error getting functions: ", e)
+        resp.setStatus(SparkThriftServerSQLException.toTStatus(e))
+    }
+    resp
+  }
+
   @throws[TException]
   override def GetOperationStatus(req: TGetOperationStatusReq): TGetOperationStatusResp = {
     val resp: TGetOperationStatusResp = new TGetOperationStatusResp
@@ -672,4 +715,6 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   private def isKerberosAuthMode: Boolean = {
     cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION).equalsIgnoreCase(KERBEROS.toString)
   }
+
+
 }

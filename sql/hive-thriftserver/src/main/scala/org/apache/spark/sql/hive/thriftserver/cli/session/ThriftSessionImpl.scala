@@ -35,6 +35,7 @@ import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.{Operation, OperationManager}
 import org.apache.spark.sql.hive.thriftserver.server.ThreadWithGarbageCleanup
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 
 import scala.collection.JavaConversions._
@@ -444,6 +445,44 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     }
   }
 
+  @throws[SparkThriftServerSQLException]
+  override def getPrimaryKeys(catalog: String, schema: String, table: String): OperationHandle = {
+    acquire(true)
+    val operationManager = getOperationManager
+    val operation: Operation = operationManager.newGetPrimaryKeysOperation(getSession, catalog, schema, table)
+    val opHandle = operation.getHandle
+    try {
+      operation.run
+      _opHandleSet.add(opHandle)
+      opHandle
+    } catch {
+      case e: SparkThriftServerSQLException =>
+        operationManager.closeOperation(opHandle)
+        throw e
+    } finally {
+      release(true)
+    }
+  }
+
+  @throws[SparkThriftServerSQLException]
+  override def getCrossReference(primaryCatalog: String, primarySchema: String, primaryTable: String, foreignCatalog: String, foreignSchema: String, foreignTable: String): OperationHandle = {
+    acquire(true)
+    val operationManager = getOperationManager
+    val operation: Operation = operationManager.newGetCrossReferenceOperation(getSession, primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema, foreignTable)
+    val opHandle = operation.getHandle
+    try {
+      operation.run
+      _opHandleSet.add(opHandle)
+      opHandle
+    } catch {
+      case e: SparkThriftServerSQLException =>
+        operationManager.closeOperation(opHandle)
+        throw e
+    } finally {
+      release(true)
+    }
+  }
+
   /**
    * close the session
    *
@@ -598,7 +637,6 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
 
 
   override def closeExpiredOperations(): Unit = {
-    import org.apache.spark.sql.hive.thriftserver.cli.OperationHandle
     val handles = _opHandleSet.toArray(new Array[OperationHandle](_opHandleSet.size))
     if (handles.length > 0) {
       val operations = _operationManager.removeExpiredOperations(handles)

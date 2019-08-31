@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.thriftserver.cli.session
 
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 
 abstract class ThriftSession extends ThriftSessionBase {
@@ -45,10 +46,12 @@ abstract class ThriftSession extends ThriftSessionBase {
    * @throws SparkThriftServerSQLException
    */
   @throws[SparkThriftServerSQLException]
-  def executeStatement(statement: String, confOverlay: Map[String, String]): OperationHandle
+  def executeStatement(statement: String,
+                       confOverlay: Map[String, String]): OperationHandle
 
   @throws[SparkThriftServerSQLException]
-  def executeStatementAsync(statement: String, confOverlay: Map[String, String]): OperationHandle
+  def executeStatementAsync(statement: String,
+                            confOverlay: Map[String, String]): OperationHandle
 
   /**
    * getTypeInfo operation handler
@@ -77,7 +80,8 @@ abstract class ThriftSession extends ThriftSessionBase {
    * @throws SparkThriftServerSQLException
    */
   @throws[SparkThriftServerSQLException]
-  def getSchemas(catalogName: String, schemaName: String): OperationHandle
+  def getSchemas(catalogName: String,
+                 schemaName: String): OperationHandle
 
   /**
    * getTables operation handler
@@ -90,7 +94,10 @@ abstract class ThriftSession extends ThriftSessionBase {
    * @throws SparkThriftServerSQLException
    */
   @throws[SparkThriftServerSQLException]
-  def getTables(catalogName: String, schemaName: String, tableName: String, tableTypes: List[String]): OperationHandle
+  def getTables(catalogName: String,
+                schemaName: String,
+                tableName: String,
+                tableTypes: List[String]): OperationHandle
 
   /**
    * getTableTypes operation handler
@@ -112,7 +119,10 @@ abstract class ThriftSession extends ThriftSessionBase {
    * @throws SparkThriftServerSQLException
    */
   @throws[SparkThriftServerSQLException]
-  def getColumns(catalogName: String, schemaName: String, tableName: String, columnName: String): OperationHandle
+  def getColumns(catalogName: String,
+                 schemaName: String,
+                 tableName: String,
+                 columnName: String): OperationHandle
 
   /**
    * getFunctions operation handler
@@ -124,7 +134,44 @@ abstract class ThriftSession extends ThriftSessionBase {
    * @throws SparkThriftServerSQLException
    */
   @throws[SparkThriftServerSQLException]
-  def getFunctions(catalogName: String, schemaName: String, functionName: String): OperationHandle
+  def getFunctions(catalogName: String,
+                   schemaName: String,
+                   functionName: String): OperationHandle
+
+  /**
+   * getPrimaryKeys operation handler
+   *
+   * @param catalog
+   * @param schema
+   * @param table
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
+  @throws[SparkThriftServerSQLException]
+  def getPrimaryKeys(catalog: String,
+                     schema: String,
+                     table: String): OperationHandle
+
+
+  /**
+   * getCrossReference operation handler
+   *
+   * @param primaryCatalog
+   * @param primarySchema
+   * @param primaryTable
+   * @param foreignCatalog
+   * @param foreignSchema
+   * @param foreignTable
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
+  @throws[SparkThriftServerSQLException]
+  def getCrossReference(primaryCatalog: String,
+                        primarySchema: String,
+                        primaryTable: String,
+                        foreignCatalog: String,
+                        foreignSchema: String,
+                        foreignTable: String): OperationHandle
 
   /**
    * close the session
@@ -144,10 +191,16 @@ abstract class ThriftSession extends ThriftSessionBase {
   def getResultSetMetadata(opHandle: OperationHandle): StructType
 
   @throws[SparkThriftServerSQLException]
-  def fetchResults(opHandle: OperationHandle, orientation: FetchOrientation, maxRows: Long, fetchType: FetchType): RowSet
+  def fetchResults(opHandle: OperationHandle,
+                   orientation: FetchOrientation,
+                   maxRows: Long,
+                   fetchType: FetchType): RowSet
 
   @throws[SparkThriftServerSQLException]
-  def getDelegationToken(authFactory: HiveAuthFactory, owner: String, renewer: String): String
+  def getDelegationToken(authFactory:
+                         HiveAuthFactory,
+                         owner: String,
+                         renewer: String): String
 
   @throws[SparkThriftServerSQLException]
   def cancelDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit

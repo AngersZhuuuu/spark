@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
-import org.apache.spark.sql.hive.thriftserver.cli.SparkThriftServerSQLException
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, SQLQueryTestSuite}

@@ -28,8 +28,9 @@ import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.cli.SessionHandle
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationManager
-import org.apache.spark.sql.hive.thriftserver.cli.{SessionHandle, SparkThriftServerSQLException}
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.hive.thriftserver.server.{SparkThriftServer, ThreadFactoryWithGarbageCleanup}
 import org.apache.spark.sql.hive.thriftserver.{CompositeService, HiveThriftServer2}
 

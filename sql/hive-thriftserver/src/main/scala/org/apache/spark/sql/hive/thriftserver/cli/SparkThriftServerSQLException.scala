@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver.cli
+package org.apache.spark.sql.hive.thriftserver.server.cli
 
 import java.sql.SQLException
 

@@ -24,10 +24,10 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.hive.service.cli.thrift.TProtocolVersion
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 

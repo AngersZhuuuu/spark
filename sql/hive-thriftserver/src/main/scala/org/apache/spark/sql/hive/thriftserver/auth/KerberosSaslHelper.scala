@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.thriftserver.auth
 
 import java.io.IOException
 import java.util
-import java.util.Map
 
 import javax.security.sasl.SaslException
 import org.apache.hadoop.hive.shims.ShimLoader

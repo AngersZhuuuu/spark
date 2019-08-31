@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.{TCLIServiceConstants, TTypeQualifierValue, TTypeQualifiers}
-
+import org.apache.hive.service.cli.thrift._
 import org.apache.spark.sql.types.{DataType, DecimalType}
 
 import scala.collection.JavaConverters._

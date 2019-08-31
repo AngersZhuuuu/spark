@@ -38,6 +38,7 @@ import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.operation.{Operation, OperationStatus}
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 
 class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
@@ -292,6 +293,27 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
                             functionName: String): OperationHandle = {
     val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getFunctions(catalogName, schemaName, functionName)
     logDebug(sessionHandle + ": getFunctions()")
+    opHandle
+  }
+
+  /* (non-Javadoc)
+    * @see org.apache.hive.service.cli.ICLIService#getPrimaryKeys(org.apache.hive.service.cli.SessionHandle)
+    *//* (non-Javadoc)
+    * @see org.apache.hive.service.cli.ICLIService#getPrimaryKeys(org.apache.hive.service.cli.SessionHandle)
+    */
+  @throws[SparkThriftServerSQLException]
+  override def getPrimaryKeys(sessionHandle: SessionHandle, catalog: String, schema: String, table: String): OperationHandle = {
+    val opHandle = sessionManager.getSession(sessionHandle).getPrimaryKeys(catalog, schema, table)
+    logDebug(sessionHandle + ": getPrimaryKeys()")
+    opHandle
+  }
+
+  /* (non-Javadoc)
+   * @see org.apache.hive.service.cli.ICLIService#getCrossReference(org.apache.hive.service.cli.SessionHandle)
+   */ @throws[SparkThriftServerSQLException]
+  override def getCrossReference(sessionHandle: SessionHandle, primaryCatalog: String, primarySchema: String, primaryTable: String, foreignCatalog: String, foreignSchema: String, foreignTable: String): OperationHandle = {
+    val opHandle = sessionManager.getSession(sessionHandle).getCrossReference(primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema, foreignTable)
+    logDebug(sessionHandle + ": getCrossReference()")
     opHandle
   }
 
