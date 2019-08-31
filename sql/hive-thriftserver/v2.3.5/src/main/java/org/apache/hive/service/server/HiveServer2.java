@@ -34,7 +34,6 @@ import org.apache.hadoop.hive.common.LogUtils;
 import org.apache.hadoop.hive.common.LogUtils.LogInitializationException;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hive.common.util.HiveStringUtils;
-import org.apache.hive.service.CompositeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -42,7 +42,7 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
 
   private var sessionUgi: UserGroupInformation = null
   private var proxySession: ThriftSession = null
-  private var sessionHive: Hive = {
+  private val sessionHive: Hive = {
     setSessionUGI(username)
     setDelegationToken
 

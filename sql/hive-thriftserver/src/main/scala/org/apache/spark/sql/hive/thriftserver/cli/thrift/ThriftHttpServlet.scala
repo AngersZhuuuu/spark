@@ -35,13 +35,14 @@ import org.apache.hive.service.CookieSigner
 import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods
 import org.apache.hive.service.auth._
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.auth.{HiveAuthFactory, NOSASL}
+import org.apache.spark.sql.hive.thriftserver.auth.{HttpAuthUtils, KERBEROS, NOSASL}
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 import org.apache.thrift.TProcessor
 import org.apache.thrift.protocol.TProtocolFactory
 import org.apache.thrift.server.TServlet
 import org.ietf.jgss._
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 class ThriftHttpServlet(processor: TProcessor,
@@ -306,7 +307,7 @@ class ThriftHttpServlet(processor: TProcessor,
     // Try authenticating with the http/_HOST principal
     if (httpUGI != null) {
       try
-        return httpUGI.doAs(new ThriftHttpServlet#HttpKerberosServerAction(request, httpUGI))
+        return httpUGI.doAs(new HttpKerberosServerAction(request, httpUGI))
       catch {
         case e: Exception =>
           logInfo("Failed to authenticate with http/_HOST kerberos principal, " + "trying with hive/_HOST kerberos principal")
@@ -314,7 +315,7 @@ class ThriftHttpServlet(processor: TProcessor,
     }
     // Now try with hive/_HOST principal
     try {
-      serviceUGI.doAs(new ThriftHttpServlet#HttpKerberosServerAction(request, serviceUGI))
+      serviceUGI.doAs(new HttpKerberosServerAction(request, serviceUGI))
     } catch {
       case e: Exception =>
         logError("Failed to authenticate with hive/_HOST kerberos principal")
@@ -448,21 +449,19 @@ class ThriftHttpServlet(processor: TProcessor,
     authHeaderBase64String
   }
 
-  private def isKerberosAuthMode(authType: String): Boolean = authType.equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString)
+  private def isKerberosAuthMode(authType: String): Boolean = authType.equalsIgnoreCase(KERBEROS.toString)
 
   private def getDoAsQueryParam(queryString: String): String = {
     logDebug("URL query string:" + queryString)
     if (queryString == null) return null
     val params: util.Map[String, Array[String]] = javax.servlet.http.HttpUtils.parseQueryString(queryString)
     val keySet: util.Set[String] = params.keySet
-    import scala.collection.JavaConversions._
-    for (key <- keySet) {
+
+    for (key <- keySet.asScala) {
       if (key.equalsIgnoreCase("doAs")) {
         return params.get(key)(0)
       }
     }
     null
   }
-
-
 }

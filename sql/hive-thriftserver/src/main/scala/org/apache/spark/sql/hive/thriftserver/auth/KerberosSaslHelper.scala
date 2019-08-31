@@ -94,7 +94,7 @@ object KerberosSaslHelper {
   }
 
 
-  private class CLIServiceProcessorFactory private[auth](val saslServer: HadoopThriftAuthBridge.Server, val service: ThriftCLIService) extends TProcessorFactory(null) {
+  private[auth] class CLIServiceProcessorFactory(val saslServer: HadoopThriftAuthBridge.Server, val service: ThriftCLIService) extends TProcessorFactory(null) {
     override def getProcessor(trans: TTransport): TProcessor = {
       val sqlProcessor = new TCLIService.Processor[TCLIService.Iface](service)
       saslServer.wrapNonAssumingProcessor(sqlProcessor)

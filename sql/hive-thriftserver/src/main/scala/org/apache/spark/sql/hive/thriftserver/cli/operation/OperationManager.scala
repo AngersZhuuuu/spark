@@ -23,15 +23,15 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.session.OperationLog
-import org.apache.hive.service.AbstractService
 import org.apache.log4j.Logger
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.hive.thriftserver.cli._
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.AbstractService
+import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{Row, SQLContext}
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._

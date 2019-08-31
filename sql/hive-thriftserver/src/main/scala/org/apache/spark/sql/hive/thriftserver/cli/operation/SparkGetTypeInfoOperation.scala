@@ -40,7 +40,7 @@ private[hive] class SparkGetTypeInfoOperation(sqlContext: SQLContext,
   extends SparkMetadataOperation(parentSession, GET_TYPE_INFO) with SparkMetadataOperationUtils with Logging {
 
   private var statementId: String = _
-  private val RESULT_SET_SCHEMA = new StructType()
+  RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TYPE_NAME", StringType))
     .add(StructField("DATA_TYPE", IntegerType))
     .add(StructField("PRECISION", IntegerType))

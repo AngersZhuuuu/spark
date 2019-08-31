@@ -28,7 +28,6 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.session.OperationLog;
-import org.apache.hive.service.AbstractService;
 import org.apache.log4j.Appender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

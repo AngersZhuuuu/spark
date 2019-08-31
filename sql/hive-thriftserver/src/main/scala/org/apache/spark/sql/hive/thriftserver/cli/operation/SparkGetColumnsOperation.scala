@@ -59,7 +59,7 @@ private[hive] class SparkGetColumnsOperation(
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
   private var statementId: String = _
-  private val RESULT_SET_SCHEMA = new StructType()
+  RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_CAT", StringType))
     .add(StructField("TABLE_SCHEM", StringType))
     .add(StructField("TABLE_NAME", StringType))

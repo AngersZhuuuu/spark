@@ -26,8 +26,9 @@ import javax.security.auth.login.LoginException
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift._
-import org.apache.hive.service.{AbstractService, ServiceException, ServiceUtils}
+import org.apache.hive.service.{ServiceException, ServiceUtils}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.thriftserver.AbstractService
 import org.apache.spark.sql.hive.thriftserver.auth.{HiveAuthFactory, KERBEROS, NONE, TSetIpAddressProcessor}
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
@@ -47,7 +48,7 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     with Runnable
     with Logging {
   private val OK_STATUS = new TStatus(TStatusCode.SUCCESS_STATUS)
-  protected var hiveAuthFactory: HiveAuthFactory = null
+  protected var hiveAuthFactory: HiveAuthFactory = new HiveAuthFactory()
 
   protected var portNum: Int = 0
   protected var serverIPAddress: InetAddress = null
@@ -656,7 +657,7 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     if (proxyUser == null) return realUser
     // check whether substitution is allowed
     if (!hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ALLOW_USER_SUBSTITUTION)) {
-      throw new Nothing("Proxy user substitution is not allowed")
+      throw new SparkThriftServerSQLException("Proxy user substitution is not allowed")
     }
     // If there's no authentication, then directly substitute the user
     if (NONE.toString.equalsIgnoreCase(hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION))) {

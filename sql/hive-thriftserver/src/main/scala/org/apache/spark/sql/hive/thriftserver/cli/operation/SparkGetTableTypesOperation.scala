@@ -41,7 +41,7 @@ private[hive] class SparkGetTableTypesOperation(sqlContext: SQLContext,
   extends SparkMetadataOperation(parentSession, GET_TABLE_TYPES) with SparkMetadataOperationUtils with Logging {
 
   private var statementId: String = _
-  private val RESULT_SET_SCHEMA = new StructType()
+  RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_TYPE", StringType))
 
   private var tableTypeMapping: TableTypeMapping = {

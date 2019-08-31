@@ -31,12 +31,14 @@ class ClassicTableTypeMapping extends TableTypeMapping {
   private val hiveToClientMap: util.Map[String, String] = new util.HashMap[String, String]
   private val clientToHiveMap: util.Map[String, String] = new util.HashMap[String, String]
 
-  this () {
+  try {
     hiveToClientMap.put(TableType.MANAGED_TABLE.toString, ClassicTableTypes.TABLE.toString)
     hiveToClientMap.put(TableType.EXTERNAL_TABLE.toString, ClassicTableTypes.TABLE.toString)
     hiveToClientMap.put(TableType.VIRTUAL_VIEW.toString, ClassicTableTypes.VIEW.toString)
     clientToHiveMap.put(ClassicTableTypes.TABLE.toString, TableType.MANAGED_TABLE.toString)
     clientToHiveMap.put(ClassicTableTypes.VIEW.toString, TableType.VIRTUAL_VIEW.toString)
+  } catch {
+    case e: Throwable => e.printStackTrace()
   }
 
   override def mapToHiveType(clientTypeName: String): String =

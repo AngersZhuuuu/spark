@@ -9,10 +9,12 @@ import org.apache.hive.common.util.HiveStringUtils
 import org.apache.hive.service.CompositeService
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.thriftserver.SparkSQLEnv
+import org.apache.spark.sql.hive.thriftserver.{CompositeService, SparkSQLEnv}
 import org.apache.spark.sql.hive.thriftserver.cli.CLIService
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.{ThriftBinaryCLIService, ThriftCLIService, ThriftHttpCLIService}
 import org.apache.spark.util.ShutdownHookManager
+
+import scala.collection.JavaConverters._
 
 class SparkThriftServer(sqlContext: SQLContext)
   extends CompositeService(classOf[SparkThriftServer].getSimpleName)
@@ -23,6 +25,8 @@ class SparkThriftServer(sqlContext: SQLContext)
 
   try {
     HiveConf.setLoadHiveServer2Config(true)
+  } catch {
+    case e: Throwable => e.printStackTrace()
   }
 
   override def init(hiveConf: HiveConf): Unit = {
@@ -171,7 +175,7 @@ object SparkThriftServer extends Logging {
         // Process --hiveconf
         // Get hiveconf param values and set the System property values
         val confProps = commandLine.getOptionProperties("hiveconf")
-        for (propKey <- confProps.stringPropertyNames) {
+        for (propKey <- confProps.stringPropertyNames.asScala) {
           // save logging message for log4j output latter after log4j initialize properly
           debugMessage.append("Setting " + propKey + "=" + confProps.getProperty(propKey) + ";\n")
           System.setProperty(propKey, confProps.getProperty(propKey))

@@ -45,7 +45,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
                         serverHiveConf: HiveConf,
                         var _ipAddress: String) extends ThriftSession with Logging {
 
-  private var _sessionHandle: SessionHandle = null
+  private var _sessionHandle: SessionHandle = new SessionHandle(_protocol)
   private var _hiveConf: HiveConf = new HiveConf(serverHiveConf)
   private var _sessionState: SessionState = null
   private var _sessionManager: SessionManager = null
@@ -73,6 +73,8 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     // Use thrift transportable formatter
     _hiveConf.set(ListSinkOperator.OUTPUT_FORMATTER, classOf[FetchFormatter.ThriftFormatter].getName)
     _hiveConf.setInt(ListSinkOperator.OUTPUT_PROTOCOL, _protocol.getValue)
+  } catch {
+    case e: Throwable => e.printStackTrace()
   }
 
   @throws[SparkThriftServerSQLException]
@@ -105,7 +107,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
         setVariable(key.substring(4), entry.getValue)
       catch {
         case e: Exception =>
-          throw new Nothing(e)
+          throw new SparkThriftServerSQLException(e)
       } else if (key.startsWith("use:")) {
         SessionState.get.setCurrentDatabase(entry.getValue)
       } else {
@@ -696,7 +698,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     }
   }
 
-  def getSession: ThriftSession = this
+  protected def getSession: ThriftSession = this
 
   override def getSessionHandle: SessionHandle = _sessionHandle
 

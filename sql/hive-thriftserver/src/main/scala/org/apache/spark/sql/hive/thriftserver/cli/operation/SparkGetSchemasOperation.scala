@@ -46,7 +46,7 @@ private[hive] class SparkGetSchemasOperation(
   extends SparkMetadataOperation(parentSession, GET_SCHEMAS) with Logging {
 
   private var statementId: String = _
-  private val RESULT_SET_SCHEMA = new StructType()
+  RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_SCHEM", StringType))
     .add(StructField("TABLE_CATALOG", StringType))
 

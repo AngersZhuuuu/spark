@@ -40,7 +40,7 @@ private[hive] class SparkGetCatalogsOperation(
   extends SparkMetadataOperation(parentSession, GET_CATALOGS) with Logging {
 
   private var statementId: String = _
-  private val RESULT_SET_SCHEMA = new StructType()
+  RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_CAT", StringType))
 
   private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)

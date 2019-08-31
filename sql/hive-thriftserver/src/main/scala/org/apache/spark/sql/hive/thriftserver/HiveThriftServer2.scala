@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.server.HiveServer2
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
@@ -30,9 +27,6 @@ import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
-import org.apache.spark.sql.hive.thriftserver.cli.{CLIService, SparkThriftServerSQLException}
-import org.apache.spark.sql.hive.thriftserver.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.sql.internal.SQLConf

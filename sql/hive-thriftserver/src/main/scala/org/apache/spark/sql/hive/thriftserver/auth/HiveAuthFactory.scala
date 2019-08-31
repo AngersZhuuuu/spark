@@ -218,6 +218,31 @@ object HiveAuthFactory extends Logging {
   private var keytabFile: Field = null
   private var getKeytab: Method = null
 
+  try {
+    val clz = classOf[UserGroupInformation]
+    try {
+      keytabFile = clz.getDeclaredField("keytabFile")
+      keytabFile.setAccessible(true);
+    } catch {
+      case nfe: NoSuchFieldError =>
+        logDebug("Cannot find private field \"keytabFile\" in class: " +
+          classOf[UserGroupInformation].getCanonicalName, nfe)
+        keytabFile = null
+    }
+
+    try {
+      getKeytab = clz.getDeclaredMethod("getKeytab")
+      getKeytab.setAccessible(true);
+    } catch {
+      case nme: NoSuchMethodError =>
+        logDebug("Cannot find private method \"getKeytab\" in class:" +
+          classOf[UserGroupInformation].getCanonicalName, nme
+        )
+        getKeytab = null
+    }
+  } catch {
+    case e: Throwable => e.printStackTrace()
+  }
 
   @throws[SparkThriftServerSQLException]
   def verifyProxyAccess(realUser: String, proxyUser: String, ipAddress: String, hiveConf: HiveConf): Unit = {
@@ -329,7 +354,7 @@ object HiveAuthFactory extends Logging {
       !Objects.equals(keytab, getKeytabFromUgi)
   }
 
-  private def getKeytabFromUgi = synchronized(classOf[UserGroupInformation]) {
+  private def getKeytabFromUgi = synchronized {
     try {
       if (keytabFile != null) {
         keytabFile.get(null).asInstanceOf[String]

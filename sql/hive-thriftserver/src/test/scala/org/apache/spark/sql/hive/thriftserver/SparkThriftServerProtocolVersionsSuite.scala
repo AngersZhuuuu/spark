@@ -18,16 +18,15 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{Date, Timestamp}
-import java.util.{List => JList, Properties}
+import java.util.{Properties, List => JList}
 
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet}
-import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.GetInfoType
+import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.hive.thriftserver.auth.PlainSaslHelper
+import org.apache.spark.sql.hive.thriftserver.cli.GetInfoType
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
-
-import org.apache.spark.sql.catalyst.util.NumberConverter
-import org.apache.spark.unsafe.types.UTF8String
 
 class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
 

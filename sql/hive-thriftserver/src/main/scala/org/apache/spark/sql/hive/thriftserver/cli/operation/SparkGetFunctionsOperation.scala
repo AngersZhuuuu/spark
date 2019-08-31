@@ -50,7 +50,7 @@ private[hive] class SparkGetFunctionsOperation(
   extends SparkMetadataOperation(parentSession, GET_FUNCTIONS) with Logging {
 
   private var statementId: String = _
-  private val RESULT_SET_SCHEMA = new StructType()
+  RESULT_SET_SCHEMA = new StructType()
     .add(StructField("FUNCTION_CAT", StringType))
     .add(StructField("FUNCTION_SCHEM", StringType))
     .add(StructField("FUNCTION_NAME", StringType))
