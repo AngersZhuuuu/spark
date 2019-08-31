@@ -28,8 +28,6 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Shell;
-import org.apache.hive.service.auth.HiveAuthFactory;
-import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.rpc.thrift.TCLIService;
 import org.apache.hive.service.rpc.thrift.TCLIService.Iface;
 import org.apache.thrift.TProcessor;

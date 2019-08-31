@@ -30,41 +30,41 @@ trait ThriftSessionBase {
   def getProtocolVersion: TProtocolVersion
 
   /**
-    * Set the session manager for the session
-    *
-    * @param sessionManager
-    */
+   * Set the session manager for the session
+   *
+   * @param sessionManager
+   */
   def setSessionManager(sessionManager: SessionManager): Unit
 
   /**
-    * Get the session manager for the session
-    */
+   * Get the session manager for the session
+   */
   def getSessionManager: SessionManager
 
   /**
-    * Set operation manager for the session
-    *
-    * @param operationManager
-    */
+   * Set operation manager for the session
+   *
+   * @param operationManager
+   */
   def setOperationManager(operationManager: OperationManager): Unit
 
   /**
-    * Check whether operation logging is enabled and session dir is created successfully
-    */
+   * Check whether operation logging is enabled and session dir is created successfully
+   */
   def isOperationLogEnabled: Boolean
 
   /**
-    * Get the session dir, which is the parent dir of operation logs
-    *
-    * @return a file representing the parent directory of operation logs
-    */
+   * Get the session dir, which is the parent dir of operation logs
+   *
+   * @return a file representing the parent directory of operation logs
+   */
   def getOperationLogSessionDir: File
 
   /**
-    * Set the session dir, which is the parent dir of operation logs
-    *
-    * @param operationLogRootDir the parent dir of the session dir
-    */
+   * Set the session dir, which is the parent dir of operation logs
+   *
+   * @param operationLogRootDir the parent dir of the session dir
+   */
   def setOperationLogSessionDir(operationLogRootDir: File): Unit
 
   def getSessionHandle: SessionHandle

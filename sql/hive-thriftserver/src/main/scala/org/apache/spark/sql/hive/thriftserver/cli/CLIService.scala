@@ -1,11 +1,26 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.sql.hive.thriftserver.cli
 
 import java.io.IOException
-import java.util
-import java.util.Map
+import java.util.concurrent.{CancellationException, ExecutionException, TimeUnit, TimeoutException}
 
 import javax.security.auth.login.LoginException
-import org.apache.commons.logging.{Log, LogFactory}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.api.MetaException
@@ -13,19 +28,24 @@ import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.Utils
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hive.service.cli.thrift.TProtocolVersion
-import org.apache.hive.service.{CompositeService, ServiceException}
 import org.apache.hive.service.server.HiveServer2
+import org.apache.hive.service.{CompositeService, ServiceException}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.thriftserver.ReflectionUtils.setSuperField
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
-import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
+import org.apache.spark.sql.hive.thriftserver.cli.operation.{Operation, OperationStatus}
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
+import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.types.StructType
 
-class CLIService(hiveServer2: HiveServer2)
+class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   extends CompositeService(classOf[CLIService].getSimpleName)
-    with ICLIService {
-  private val LOG = LogFactory.getLog(classOf[CLIService].getName)
+    with ICLIService with Logging {
+
+  import CLIService._
 
   private var hiveConf: HiveConf = null
   private var sessionManager: SessionManager = null
@@ -34,31 +54,45 @@ class CLIService(hiveServer2: HiveServer2)
 
   override def init(hiveConf: HiveConf): Unit = {
     this.hiveConf = hiveConf
-    sessionManager = new SessionManager(hiveServer2)
+    sessionManager = new SessionManager(hiveServer2, sqlContext)
     addService(sessionManager)
-    //  If the hadoop cluster is secure, do a kerberos login for the service from the keytab
+
     if (UserGroupInformation.isSecurityEnabled) {
       try {
-        HiveAuthFactory.loginFromKeytab(hiveConf)
-        this.serviceUGI = Utils.getUGI
+        val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
+        val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
+        if (principal.isEmpty || keyTabFile.isEmpty) {
+          throw new IOException(
+            "HiveServer2 Kerberos principal or keytab is not correctly configured")
+        }
+        val originalUgi = UserGroupInformation.getCurrentUser
+        serviceUGI =
+          if (HiveAuthFactory.needUgiLogin(originalUgi,
+            SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)) {
+            HiveAuthFactory.loginFromKeytab(hiveConf)
+            Utils.getUGI()
+          } else {
+            originalUgi
+          }
       } catch {
-        case e: IOException =>
-          throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
-        case e: LoginException =>
+        case e@(_: IOException | _: LoginException) =>
           throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
       }
-      // Also try creating a UGI object for the SPNego principal
-      val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL)
-      val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB)
-      if (principal.isEmpty || keyTabFile.isEmpty) LOG.info("SPNego httpUGI not created, spNegoPrincipal: " + principal + ", ketabFile: " + keyTabFile)
-      else try {
-        this.httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf)
-        LOG.info("SPNego httpUGI successfully created.")
-      } catch {
-        case e: IOException =>
-          LOG.warn("SPNego httpUGI creation failed: ", e)
+
+      // Try creating spnego UGI if it is configured.
+      val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL).trim
+      val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB).trim
+      if (principal.nonEmpty && keyTabFile.nonEmpty) {
+        try {
+          httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf)
+        } catch {
+          case e: IOException =>
+            throw new ServiceException("Unable to login to spnego with given principal " +
+              s"$principal and keytab $keyTabFile: $e", e)
+        }
       }
     }
+
     // creates connection to HMS and thus *must* occur after kerberos login above
     try {
       applyAuthorizationConfigPolicy(hiveConf)
@@ -89,52 +123,262 @@ class CLIService(hiveServer2: HiveServer2)
 
   def getHttpUGI: UserGroupInformation = this.httpUGI
 
-
-  override def openSession(protocol: TProtocolVersion,
-                           username: String,
-                           password: String,
-                           ipAddress: String,
-                           configuration: Predef.Map[String, String]): SessionHandle = {
-    val sessionHandle = sessionManager.openSession(protocol, username, password, ipAddress, configuration, false, null)
-    LOG.debug(sessionHandle + ": openSession()")
-    return sessionHandle
+  def openSession(protocol: TProtocolVersion,
+                  username: String,
+                  password: String,
+                  configuration: Predef.Map[String, String]): SessionHandle = {
+    val sessionHandle: SessionHandle = sessionManager.openSession(protocol, username, password, null, configuration, false, null)
+    logDebug(sessionHandle + ": openSession()")
+    sessionHandle
   }
 
-  override def openSessionWithImpersonation(protocol: TProtocolVersion, username: String, password: String, ipAddress: String, configuration: Predef.Map[String, String], delegationToken: String): SessionHandle = ???
+  def openSession(protocol: TProtocolVersion,
+                  username: String,
+                  password: String,
+                  ipAddress: String,
+                  configuration: Predef.Map[String, String]): SessionHandle = {
+    val sessionHandle = sessionManager.openSession(protocol, username, password, ipAddress, configuration, false, null)
+    logDebug(sessionHandle + ": openSession()")
+    sessionHandle
+  }
 
-  override def closeSession(sessionHandle: SessionHandle): Unit = ???
+  def openSessionWithImpersonation(protocol: TProtocolVersion,
+                                   username: String,
+                                   password: String,
+                                   configuration: Predef.Map[String, String],
+                                   delegationToken: String): SessionHandle = {
+    val sessionHandle = sessionManager.openSession(protocol, username, password, null, configuration, true, delegationToken)
+    logDebug(sessionHandle + ": openSessionWithImpersonation()")
+    sessionHandle
+  }
 
-  override def getInfo(sessionHandle: SessionHandle, infoType: GetInfoType): GetInfoValue = ???
+  def openSessionWithImpersonation(protocol: TProtocolVersion,
+                                   username: String,
+                                   password: String,
+                                   ipAddress: String,
+                                   configuration: Predef.Map[String, String],
+                                   delegationToken: String): SessionHandle = {
+    val sessionHandle =
+      sessionManager.openSession(protocol,
+        username,
+        password,
+        ipAddress,
+        configuration,
+        true,
+        delegationToken)
+    logDebug(sessionHandle + ": openSessionWithImpersonation()")
+    sessionHandle
+  }
 
-  override def executeStatement(sessionHandle: SessionHandle, statement: String, confOverlay: Predef.Map[String, String]): OperationHandle = ???
+  override def openSession(username: String,
+                           password: String,
+                           configuration: Predef.Map[String, String]): SessionHandle = {
+    val sessionHandle =
+      sessionManager.openSession(
+        SERVER_VERSION,
+        username,
+        password,
+        null,
+        configuration,
+        false,
+        null)
+    logDebug(sessionHandle + ": openSession()")
+    sessionHandle
+  }
 
-  override def executeStatementAsync(sessionHandle: SessionHandle, statement: String, confOverlay: Predef.Map[String, String]): OperationHandle = ???
+  override def openSessionWithImpersonation(username: String,
+                                            password: String,
+                                            configuration: Predef.Map[String, String],
+                                            delegationToken: String): SessionHandle = {
+    val sessionHandle =
+      sessionManager.openSession(SERVER_VERSION,
+        username,
+        password,
+        null,
+        configuration,
+        true,
+        delegationToken)
+    logDebug(sessionHandle + ": openSessionWithImpersonation()")
+    sessionHandle
+  }
 
-  override def getTypeInfo(sessionHandle: SessionHandle): OperationHandle = ???
+  override def closeSession(sessionHandle: SessionHandle): Unit = {
+    sessionManager.closeSession(sessionHandle)
+    logDebug(sessionHandle + ": closeSession()")
+  }
 
-  override def getCatalogs(sessionHandle: SessionHandle): OperationHandle = ???
 
-  override def getSchemas(sessionHandle: SessionHandle, catalogName: String, schemaName: String): OperationHandle = ???
+  override def getInfo(sessionHandle: SessionHandle,
+                       infoType: GetInfoType): GetInfoValue = {
+    val infoValue = sessionManager.getSession(sessionHandle).getInfo(infoType)
+    logDebug(sessionHandle + ": getInfo()")
+    infoValue
+  }
 
-  override def getTables(sessionHandle: SessionHandle, catalogName: String, schemaName: String, tableName: String, tableTypes: List[String]): OperationHandle = ???
+  override def executeStatement(sessionHandle: SessionHandle,
+                                statement: String,
+                                confOverlay: Predef.Map[String, String]): OperationHandle = {
+    val session = sessionManager.getSession(sessionHandle)
+    val opHandle: OperationHandle = session.executeStatement(statement, confOverlay)
+    logDebug(sessionHandle + ": executeStatement()")
+    opHandle
+  }
 
-  override def getTableTypes(sessionHandle: SessionHandle): OperationHandle = ???
+  override def executeStatementAsync(sessionHandle: SessionHandle,
+                                     statement: String,
+                                     confOverlay: Predef.Map[String, String]): OperationHandle = {
+    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).executeStatementAsync(statement, confOverlay)
+    logDebug(sessionHandle + ": executeStatementAsync()")
+    opHandle
+  }
 
-  override def getColumns(sessionHandle: SessionHandle, catalogName: String, schemaName: String, tableName: String, columnName: String): OperationHandle = ???
+  override def getTypeInfo(sessionHandle: SessionHandle): OperationHandle = {
+    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getTypeInfo
+    logDebug(sessionHandle + ": getTypeInfo()")
+    opHandle
+  }
 
-  override def getFunctions(sessionHandle: SessionHandle, catalogName: String, schemaName: String, functionName: String): OperationHandle = ???
+  override def getCatalogs(sessionHandle: SessionHandle): OperationHandle = {
+    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getTypeInfo
+    logDebug(sessionHandle + ": getTypeInfo()")
+    opHandle
+  }
 
-  override def getOperationStatus(opHandle: OperationHandle): OperationStatus = ???
 
-  override def cancelOperation(opHandle: OperationHandle): Unit = ???
+  override def getSchemas(sessionHandle: SessionHandle,
+                          catalogName: String,
+                          schemaName: String): OperationHandle = {
+    val opHandle: OperationHandle =
+      sessionManager.getSession(sessionHandle)
+        .getSchemas(catalogName, schemaName)
+    logDebug(sessionHandle + ": getSchemas()")
+    opHandle
+  }
 
-  override def closeOperation(opHandle: OperationHandle): Unit = ???
+  override def getTables(sessionHandle: SessionHandle,
+                         catalogName: String,
+                         schemaName: String,
+                         tableName: String,
+                         tableTypes: List[String]): OperationHandle = {
+    val opHandle: OperationHandle =
+      sessionManager.getSession(sessionHandle)
+        .getTables(catalogName, schemaName, tableName, tableTypes)
+    logDebug(sessionHandle + ": getTables()")
+    opHandle
+  }
 
-  override def getResultSetMetadata(opHandle: OperationHandle): StructType = ???
 
-  override def fetchResults(opHandle: OperationHandle): RowSet = ???
+  override def getTableTypes(sessionHandle: SessionHandle): OperationHandle = {
+    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getTableTypes
+    logDebug(sessionHandle + ": getTableTypes()")
+    opHandle
+  }
 
-  override def fetchResults(opHandle: OperationHandle, orientation: FetchOrientation, maxRows: Long, fetchType: FetchType): RowSet = ???
+  override def getColumns(sessionHandle: SessionHandle,
+                          catalogName: String,
+                          schemaName: String,
+                          tableName: String,
+                          columnName: String): OperationHandle = {
+    val opHandle: OperationHandle =
+      sessionManager.getSession(sessionHandle)
+        .getColumns(catalogName, schemaName, tableName, columnName)
+    logDebug(sessionHandle + ": getColumns()")
+    opHandle
+  }
+
+
+  override def getFunctions(sessionHandle: SessionHandle,
+                            catalogName: String,
+                            schemaName: String,
+                            functionName: String): OperationHandle = {
+    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getFunctions(catalogName, schemaName, functionName)
+    logDebug(sessionHandle + ": getFunctions()")
+    opHandle
+  }
+
+  override def getOperationStatus(opHandle: OperationHandle): OperationStatus = {
+    val operation = sessionManager.getOperationManager.getOperation(opHandle)
+
+    /*
+     * If this is a background operation run asynchronously,
+     * we block for a configured duration, before we return
+     * (duration: HIVE_SERVER2_LONG_POLLING_TIMEOUT).
+     * However, if the background operation is complete, we return immediately.
+     */
+    if (operation.shouldRunAsync) {
+      val conf = operation.getParentSession.getHiveConf
+      val timeout =
+        HiveConf.getTimeVar(conf,
+          HiveConf.ConfVars.HIVE_SERVER2_LONG_POLLING_TIMEOUT,
+          TimeUnit.MILLISECONDS)
+      try
+        operation.getBackgroundHandle.get(timeout, TimeUnit.MILLISECONDS)
+      catch {
+        case e: TimeoutException =>
+          // No Op, return to the caller since long polling timeout has expired
+          logTrace(opHandle + ": Long polling timed out")
+        case e: CancellationException =>
+          // The background operation thread was cancelled
+          logTrace(opHandle + ": The background operation was cancelled", e)
+        case e: ExecutionException =>
+          // The background operation thread was aborted
+          logTrace(opHandle + ": The background operation was aborted", e)
+        case e: InterruptedException =>
+
+        // No op, this thread was interrupted
+        // In this case, the call might return sooner than long polling timeout
+      }
+    }
+    val opStatus = operation.getStatus
+    logDebug(opHandle + ": getOperationStatus()")
+    opStatus
+  }
+
+  override def cancelOperation(opHandle: OperationHandle): Unit = {
+    sessionManager.getOperationManager
+      .getOperation(opHandle)
+      .getParentSession
+      .cancelOperation(opHandle)
+    logDebug(opHandle + ": cancelOperation()")
+  }
+
+  override def closeOperation(opHandle: OperationHandle): Unit = {
+    sessionManager.getOperationManager
+      .getOperation(opHandle)
+      .getParentSession
+      .closeOperation(opHandle)
+    logDebug(opHandle + ": closeOperation")
+  }
+
+  override def getResultSetMetadata(opHandle: OperationHandle): StructType = {
+    val tableSchema = sessionManager
+      .getOperationManager
+      .getOperation(opHandle)
+      .getParentSession
+      .getResultSetMetadata(opHandle)
+    logDebug(opHandle + ": getResultSetMetadata()")
+    tableSchema
+  }
+
+  override def fetchResults(opHandle: OperationHandle): RowSet = {
+    fetchResults(opHandle,
+      Operation.DEFAULT_FETCH_ORIENTATION,
+      Operation.DEFAULT_FETCH_MAX_ROWS,
+      FetchType.QUERY_OUTPUT)
+  }
+
+  override def fetchResults(opHandle: OperationHandle,
+                            orientation: FetchOrientation,
+                            maxRows: Long,
+                            fetchType: FetchType): RowSet = {
+    val rowSet: RowSet = sessionManager
+      .getOperationManager
+      .getOperation(opHandle)
+      .getParentSession
+      .fetchResults(opHandle, orientation, maxRows, fetchType)
+    logDebug(opHandle + ": fetchResults()")
+    rowSet
+  }
 
   // obtain delegation token for the give user from metastore
   @throws[SparkThriftServerSQLException]
@@ -159,11 +403,27 @@ class CLIService(hiveServer2: HiveServer2)
     }
   }
 
-  override def getDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, owner: String, renewer: String): String = ???
 
-  override def cancelDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit = ???
+  @throws[SparkThriftServerSQLException]
+  override def getDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, owner: String, renewer: String): String = {
+    val delegationToken = sessionManager.getSession(sessionHandle).getDelegationToken(authFactory, owner, renewer)
+    logInfo(sessionHandle + ": getDelegationToken()")
+    delegationToken
+  }
 
-  override def renewDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit = ???
+  @throws[SparkThriftServerSQLException]
+  override def cancelDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit = {
+    sessionManager.getSession(sessionHandle).cancelDelegationToken(authFactory, tokenStr)
+    logInfo(sessionHandle + ": cancelDelegationToken()")
+  }
+
+  @throws[SparkThriftServerSQLException]
+  override def renewDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit = {
+    sessionManager.getSession(sessionHandle).renewDelegationToken(authFactory, tokenStr)
+    logInfo(sessionHandle + ": renewDelegationToken()")
+  }
+
+  def getSessionManager: SessionManager = sessionManager
 }
 
 object CLIService {

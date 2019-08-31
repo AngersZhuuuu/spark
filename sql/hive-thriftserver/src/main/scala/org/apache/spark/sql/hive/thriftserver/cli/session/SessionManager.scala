@@ -26,13 +26,15 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.CompositeService
 import org.apache.hive.service.cli.thrift.TProtocolVersion
-import org.apache.hive.service.server.HiveServer2
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationManager
 import org.apache.spark.sql.hive.thriftserver.cli.{SessionHandle, SparkThriftServerSQLException}
-import org.apache.spark.sql.hive.thriftserver.server.ThreadFactoryWithGarbageCleanup
+import org.apache.spark.sql.hive.thriftserver.server.{SparkThriftServer, ThreadFactoryWithGarbageCleanup}
 
-class SessionManager(hiveServer2: HiveServer2)
+class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   extends CompositeService(classOf[SessionManager].getSimpleName)
     with Logging {
 
@@ -133,7 +135,7 @@ class SessionManager(hiveServer2: HiveServer2)
               try
                 closeSession(handle)
               catch {
-                case e: HiveSQLException =>
+                case e: SparkThriftServerSQLException =>
                   logWarning("Exception is thrown closing session " + handle, e)
               }
             }
@@ -192,7 +194,7 @@ class SessionManager(hiveServer2: HiveServer2)
                   sessionConf: Map[String, String]): SessionHandle =
     openSession(protocol, username, password, ipAddress, sessionConf, false, null)
 
-  @throws[HiveSQLException]
+  @throws[SparkThriftServerSQLException]
   def openSession(protocol: TProtocolVersion,
                   username: String,
                   password: String,
@@ -223,26 +225,41 @@ class SessionManager(hiveServer2: HiveServer2)
             logWarning("Error closing session", t)
         }
         session = null
-        throw new HiveSQLException("Failed to open new session: " + e, e)
+        throw new SparkThriftServerSQLException("Failed to open new session: " + e, e)
     }
     if (isOperationLogEnabled) {
       session.setOperationLogSessionDir(operationLogRootDir)
     }
     handleToSession.put(session.getSessionHandle, session)
-    session.getSessionHandle
+    val sessionHandle = session.getSessionHandle
+    HiveThriftServer2.listener.onSessionCreated(
+      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+    val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
+      sqlContext
+    } else {
+      sqlContext.newSession()
+    }
+    ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+    if (sessionConf != null && sessionConf.contains("use:database")) {
+      ctx.sql(s"use ${sessionConf.get("use:database")}")
+    }
+    operationManager.sessionToContexts.put(sessionHandle, ctx)
+    sessionHandle
   }
 
 
-  @throws[HiveSQLException]
+  @throws[SparkThriftServerSQLException]
   def closeSession(sessionHandle: SessionHandle): Unit = {
     val session = handleToSession.remove(sessionHandle)
+    operationManager.sessionToActivePool.remove(sessionHandle)
+    operationManager.sessionToContexts.remove(sessionHandle)
     if (session == null) {
       throw new SparkThriftServerSQLException("Session does not exist!")
     }
     session.close
   }
 
-  @throws[HiveSQLException]
+  @throws[SparkThriftServerSQLException]
   def getSession(sessionHandle: SessionHandle): ThriftSession = {
     val session = handleToSession.get(sessionHandle)
     if (session == null) {

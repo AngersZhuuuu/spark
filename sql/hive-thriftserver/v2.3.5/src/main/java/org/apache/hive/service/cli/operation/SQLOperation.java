@@ -57,7 +57,6 @@ import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.apache.hive.service.server.ThreadWithGarbageCleanup;
 
 /**
  * SQLOperation.

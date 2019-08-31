@@ -102,3 +102,18 @@ case object PENDING extends OperationState {
   }
 }
 
+object OperationState {
+  def getOperationState(tOperationState:TOperationState): OperationState ={
+    tOperationState match {
+      case TOperationState.INITIALIZED_STATE => INITIALIZED
+      case TOperationState.PENDING_STATE => PENDING
+      case TOperationState.RUNNING_STATE => RUNNING
+      case TOperationState.CANCELED_STATE => CANCELED
+      case TOperationState.ERROR_STATE => ERROR
+      case TOperationState.CLOSED_STATE => CLOSED
+      case TOperationState.FINISHED_STATE => FINISHED
+      case TOperationState.UKNOWN_STATE=> UNKNOWN
+    }
+  }
+}
+

@@ -17,18 +17,18 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
 import org.apache.spark.sql.types.StructType
 
 
 trait ICLIService {
-  @throws[SparkThriftServerSQLException]
-  def openSession(protocol: TProtocolVersion, username: String, password: String, ipAddress: String, configuration: Map[String, String]): SessionHandle
 
   @throws[SparkThriftServerSQLException]
-  def openSessionWithImpersonation(protocol: TProtocolVersion, username: String, password: String, ipAddress: String, configuration: Map[String, String], delegationToken: String): SessionHandle
+  def openSession(username: String, password: String, configuration: Map[String, String]): SessionHandle
+
+  @throws[SparkThriftServerSQLException]
+  def openSessionWithImpersonation(username: String, password: String, configuration: Map[String, String], delegationToken: String): SessionHandle
 
   @throws[SparkThriftServerSQLException]
   def closeSession(sessionHandle: SessionHandle): Unit

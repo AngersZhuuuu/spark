@@ -17,19 +17,14 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli.session
 
-import org.apache.hadoop.hive.metastore.IMetaStoreClient
-
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.types.StructType
 
 abstract class ThriftSession extends ThriftSessionBase {
 
-  @throws[Exception]
-  def open(sessionConfMap: Map[String, String]): Unit
-
   @throws[SparkThriftServerSQLException]
-  def getMetaStoreClient: IMetaStoreClient
+  def open(sessionConfMap: Map[String, String]): Unit
 
   /**
    * getInfo operation handler
@@ -43,12 +38,12 @@ abstract class ThriftSession extends ThriftSessionBase {
 
   /**
    * execute operation handler
-    *
-    * @param statement
-    * @param confOverlay
-    * @return
-    * @throws SparkThriftServerSQLException
-    */
+   *
+   * @param statement
+   * @param confOverlay
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
   @throws[SparkThriftServerSQLException]
   def executeStatement(statement: String, confOverlay: Map[String, String]): OperationHandle
 
@@ -56,46 +51,46 @@ abstract class ThriftSession extends ThriftSessionBase {
   def executeStatementAsync(statement: String, confOverlay: Map[String, String]): OperationHandle
 
   /**
-    * getTypeInfo operation handler
-    *
-    * @return
-    * @throws SparkThriftServerSQLException
-    */
+   * getTypeInfo operation handler
+   *
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
   @throws[SparkThriftServerSQLException]
   def getTypeInfo: OperationHandle
 
   /**
-    * getCatalogs operation handler
-    *
-    * @return
-    * @throws SparkThriftServerSQLException
-    */
+   * getCatalogs operation handler
+   *
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
   @throws[SparkThriftServerSQLException]
   def getCatalogs: OperationHandle
 
   /**
-    * getSchemas operation handler
-    *
-    * @param catalogName
-    * @param schemaName
-    * @return
-    * @throws SparkThriftServerSQLException
-    */
+   * getSchemas operation handler
+   *
+   * @param catalogName
+   * @param schemaName
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
   @throws[SparkThriftServerSQLException]
   def getSchemas(catalogName: String, schemaName: String): OperationHandle
 
   /**
-    * getTables operation handler
-    *
-    * @param catalogName
-    * @param schemaName
-    * @param tableName
-    * @param tableTypes
-    * @return
-    * @throws SparkThriftServerSQLException
-    */
+   * getTables operation handler
+   *
+   * @param catalogName
+   * @param schemaName
+   * @param tableName
+   * @param tableTypes
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
   @throws[SparkThriftServerSQLException]
-  def getTables(catalogName: String, schemaName: String, tableName: String, tableTypes: Seq[String]): OperationHandle
+  def getTables(catalogName: String, schemaName: String, tableName: String, tableTypes: List[String]): OperationHandle
 
   /**
    * getTableTypes operation handler

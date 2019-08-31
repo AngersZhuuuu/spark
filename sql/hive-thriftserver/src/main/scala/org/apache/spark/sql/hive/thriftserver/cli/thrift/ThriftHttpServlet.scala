@@ -35,6 +35,7 @@ import org.apache.hive.service.CookieSigner
 import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods
 import org.apache.hive.service.auth._
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.thriftserver.auth.{HiveAuthFactory, NOSASL}
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 import org.apache.thrift.TProcessor
 import org.apache.thrift.protocol.TProtocolFactory
@@ -117,7 +118,7 @@ class ThriftHttpServlet(processor: TProcessor,
       // Set the thread local ip address
       SessionManager.setIpAddress(clientIpAddress)
       // Generate new cookie and add it to the response
-      if (requireNewCookie && !authType.equalsIgnoreCase(HiveAuthFactory.AuthTypes.NOSASL.toString)) {
+      if (requireNewCookie && !authType.equalsIgnoreCase(NOSASL.toString)) {
         val cookieToken: String = HttpAuthUtils.createCookieToken(clientUserName)
         val hs2Cookie: Cookie = createCookie(signer.signCookie(cookieToken))
         if (isHttpOnlyCookie) {
@@ -274,7 +275,7 @@ class ThriftHttpServlet(processor: TProcessor,
   private def doPasswdAuth(request: HttpServletRequest, authType: String): String = {
     val userName: String = getUsername(request, authType)
     // No-op when authType is NOSASL
-    if (!authType.equalsIgnoreCase(HiveAuthFactory.AuthTypes.NOSASL.toString)) {
+    if (!authType.equalsIgnoreCase(NOSASL.toString)) {
       try {
         val authMethod: AuthenticationProviderFactory.AuthMethods =
           AuthMethods.getValidAuthMethod(authType)

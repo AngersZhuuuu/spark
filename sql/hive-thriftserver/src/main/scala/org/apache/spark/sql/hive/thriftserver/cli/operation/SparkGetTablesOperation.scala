@@ -22,9 +22,9 @@ import java.util.{UUID, List => JList}
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
-import org.apache.hive.service.cli.HiveSQLException
+import org.apache.hive.service.cli.CLIServiceUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
@@ -38,20 +38,19 @@ import scala.collection.JavaConverters._
 /**
  * Spark's own GetTablesOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sqlContext    SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName catalog name. null if not applicable
- * @param schemaName database name, null or a concrete database name
- * @param tableName table name pattern
- * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW"
+ * @param catalogName   catalog name. null if not applicable
+ * @param schemaName    database name, null or a concrete database name
+ * @param tableName     table name pattern
+ * @param tableTypes    list of allowed table types, e.g. "TABLE", "VIEW"
  */
-private[hive] class SparkGetTablesOperation(
-    sqlContext: SQLContext,
-    parentSession: ThriftSession,
-    catalogName: String,
-    schemaName: String,
-    tableName: String,
-    tableTypes: JList[String])
+private[hive] class SparkGetTablesOperation(sqlContext: SQLContext,
+                                            parentSession: ThriftSession,
+                                            catalogName: String,
+                                            schemaName: String,
+                                            tableName: String,
+                                            tableTypes: JList[String])
   extends SparkMetadataOperation(parentSession, GET_TABLES)
     with SparkMetadataOperationUtils with Logging {
 
@@ -69,6 +68,7 @@ private[hive] class SparkGetTablesOperation(
     val tableMappingStr = parentSession.getHiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
     TableTypeMappingFactory.getTableTypeMapping(tableMappingStr)
   }
+
   override def close(): Unit = {
     super.close()
     HiveThriftServer2.listener.onOperationClosed(statementId)
@@ -131,7 +131,7 @@ private[hive] class SparkGetTablesOperation(
       }
       setState(FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: SparkThriftServerSQLException =>
         setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
@@ -141,10 +141,10 @@ private[hive] class SparkGetTablesOperation(
   }
 
   private def addToRowSet(
-      dbName: String,
-      tableName: String,
-      tableType: String,
-      comment: Option[String]): Unit = {
+                           dbName: String,
+                           tableName: String,
+                           tableType: String,
+                           comment: Option[String]): Unit = {
     val rowData = Array[AnyRef](
       "",
       dbName,
@@ -153,9 +153,9 @@ private[hive] class SparkGetTablesOperation(
       comment.getOrElse(""))
     // Since HIVE-7575(Hive 2.0.0), adds 5 additional columns to the ResultSet of GetTables.
     if (HiveUtils.isHive23) {
-      rowSet.addRow(rowData ++ Array(null, null, null, null, null))
+      rowSet.addRow(Row(rowData ++ Array(null, null, null, null, null)))
     } else {
-      rowSet.addRow(rowData)
+      rowSet.addRow(Row(rowData))
     }
   }
 

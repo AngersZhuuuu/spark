@@ -26,7 +26,6 @@ import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

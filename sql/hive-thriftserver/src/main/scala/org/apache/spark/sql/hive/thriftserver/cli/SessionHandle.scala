@@ -28,6 +28,10 @@ class SessionHandle private(handleId: HandleIdentifier, protocol: TProtocolVersi
     this(new HandleIdentifier(tSessionHandle.getSessionId),
       TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1)
 
+
+  def this(tSessionHandle: TSessionHandle, protocol: TProtocolVersion) =
+    this(new HandleIdentifier(tSessionHandle.getSessionId), protocol)
+
   def this(protocol: TProtocolVersion) = this(new HandleIdentifier(), protocol)
 
   def toTSessionHandle: TSessionHandle = {

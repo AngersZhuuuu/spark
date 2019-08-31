@@ -106,13 +106,13 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
   }
 
   /**
-    * Enable delegation token for the session
-    * save the token string and set the token.signature in hive conf. The metastore client uses
-    * this token.signature to determine where to use kerberos or delegation token
-    *
-    * @throws SparkThriftServerSQLException
-    * @throws IOException
-    */
+   * Enable delegation token for the session
+   * save the token string and set the token.signature in hive conf. The metastore client uses
+   * this token.signature to determine where to use kerberos or delegation token
+   *
+   * @throws SparkThriftServerSQLException
+   * @throws IOException
+   */
   @throws[SparkThriftServerSQLException]
   private def setDelegationToken(): Unit = {
     if (delegationTokenStr != null) {

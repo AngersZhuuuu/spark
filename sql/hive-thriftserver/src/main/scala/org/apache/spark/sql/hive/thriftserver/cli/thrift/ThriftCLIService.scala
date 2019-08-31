@@ -20,22 +20,19 @@ package org.apache.spark.sql.hive.thriftserver.cli.thrift
 import java.io.IOException
 import java.net.{InetAddress, UnknownHostException}
 import java.util
-import java.util.{HashMap, Map}
 import java.util.concurrent.TimeUnit
 
 import javax.security.auth.login.LoginException
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.{AbstractService, ServiceException, ServiceUtils}
-import org.apache.hive.service.auth.TSetIpAddressProcessor
 import org.apache.hive.service.cli.thrift._
-import org.apache.hive.service.server.HiveServer2
+import org.apache.hive.service.{AbstractService, ServiceException, ServiceUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.auth.{HiveAuthFactory, KERBEROS, NONE}
-import org.apache.spark.sql.hive.thriftserver.cli.FetchType.LOG
+import org.apache.spark.sql.hive.thriftserver.auth.{HiveAuthFactory, KERBEROS, NONE, TSetIpAddressProcessor}
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
+import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.types.StructType
 import org.apache.thrift.TException
 import org.apache.thrift.protocol.TProtocol
@@ -125,7 +122,7 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
         throw new ServiceException(e)
     }
     // HTTP mode
-    if (HiveServer2.isHTTPTransportMode(hiveConf)) {
+    if (SparkThriftServer.isHTTPTransportMode(hiveConf)) {
       workerKeepAliveTime = hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_WORKER_KEEPALIVE_TIME, TimeUnit.SECONDS)
       portString = System.getenv("HIVE_SERVER2_THRIFT_HTTP_PORT")
       if (portString != null) {

@@ -39,6 +39,14 @@ class SparkThriftServerSQLException(reason: String, sqlState: String, vendorCode
 
   def this(cause: Throwable) = this(cause.toString, cause)
 
+  def this(status: TStatus) {
+    // TODO: set correct vendorCode field
+    this(status.getErrorMessage, status.getSqlState, status.getErrorCode)
+    //    if (status.getInfoMessages != null) {
+    //      initCause(toCause(status.getInfoMessages.asScala.toArray))
+    //    }
+  }
+
   /**
    * Converts current object to a [[TStatus]] object
    *
@@ -52,6 +60,11 @@ class SparkThriftServerSQLException(reason: String, sqlState: String, vendorCode
     tStatus.setInfoMessages(SparkThriftServerSQLException.toString(this).asJava)
     tStatus
   }
+
+  //  def toCause(details: Array[String]): Throwable = {
+  //    toStackTrace(details, null, 0)
+  //  }
+
 }
 
 object SparkThriftServerSQLException {

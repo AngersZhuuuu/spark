@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.*;
 
 public interface HiveSession extends HiveSessionBase {

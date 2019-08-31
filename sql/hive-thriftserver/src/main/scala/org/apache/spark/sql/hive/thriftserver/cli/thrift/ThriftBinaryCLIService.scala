@@ -23,7 +23,6 @@ import java.util.concurrent.{ExecutorService, SynchronousQueue, ThreadPoolExecut
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.CLIService

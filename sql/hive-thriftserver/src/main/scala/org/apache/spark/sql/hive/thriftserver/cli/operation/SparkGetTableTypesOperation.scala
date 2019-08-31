@@ -21,9 +21,8 @@ import java.util.UUID
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hive.service.cli.HiveSQLException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
@@ -34,12 +33,11 @@ import org.apache.spark.util.{Utils => SparkUtils}
 /**
  * Spark's own GetTableTypesOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sqlContext    SQLContext to use
  * @param parentSession a HiveSession from SessionManager
  */
-private[hive] class SparkGetTableTypesOperation(
-    sqlContext: SQLContext,
-    parentSession: ThriftSession)
+private[hive] class SparkGetTableTypesOperation(sqlContext: SQLContext,
+                                                parentSession: ThriftSession)
   extends SparkMetadataOperation(parentSession, GET_TABLE_TYPES) with SparkMetadataOperationUtils with Logging {
 
   private var statementId: String = _
@@ -47,7 +45,7 @@ private[hive] class SparkGetTableTypesOperation(
     .add(StructField("TABLE_TYPE", StringType))
 
   private var tableTypeMapping: TableTypeMapping = {
-    val tableMappingStr = parentSession.getConf.get(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
+    val tableMappingStr = parentSession.getHiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
     TableTypeMappingFactory.getTableTypeMapping(tableMappingStr)
   }
 
@@ -81,11 +79,11 @@ private[hive] class SparkGetTableTypesOperation(
     try {
       val tableTypes = CatalogTableType.tableTypes.map(tableTypeString).toSet
       tableTypes.foreach { tableType =>
-        rowSet.addRow(Array[AnyRef](tableType))
+        rowSet.addRow(Row(tableType))
       }
       setState(FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: SparkThriftServerSQLException =>
         setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))

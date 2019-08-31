@@ -15,8 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver.conf
+package org.apache.spark.sql.hive.thriftserver.cli
 
-class ThriftServerConf {
+/**
+ * PatternOrIdentifier.
+ *
+ */
+class PatternOrIdentifier(var text: String) {
 
+  var isPt:Boolean = false
+
+  def isPattern: Boolean = isPt
+
+  def isIdentifier: Boolean = !isPt
+
+  override def toString: String = text
 }

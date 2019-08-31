@@ -64,7 +64,7 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
 
   def getConfiguration: HiveConf = _conf
 
-  def getSession: ThriftSession = session
+  def getParentSession: ThriftSession = session
 
   def getHandle: OperationHandle = _opHandle
 
@@ -186,26 +186,26 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
 
 
   /**
-    * Invoked before runInternal().
-    * Set up some preconditions, or configurations.
-    */
+   * Invoked before runInternal().
+   * Set up some preconditions, or configurations.
+   */
   protected def beforeRun(): Unit = {
     createOperationLog()
   }
 
   /**
-    * Invoked after runInternal(), even if an exception is thrown in runInternal().
-    * Clean up resources, which was set up in beforeRun().
-    */
+   * Invoked after runInternal(), even if an exception is thrown in runInternal().
+   * Clean up resources, which was set up in beforeRun().
+   */
   protected def afterRun(): Unit = {
     unregisterOperationLog()
   }
 
   /**
-    * Implemented by subclass of Operation class to execute specific behaviors.
-    *
-    * @throws SparkThriftServerSQLException
-    */
+   * Implemented by subclass of Operation class to execute specific behaviors.
+   *
+   * @throws SparkThriftServerSQLException
+   */
   @throws[SparkThriftServerSQLException]
   protected def runInternal(): Unit
 
@@ -247,20 +247,20 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
 
   @throws[SparkThriftServerSQLException]
   def getNextRowSet: RowSet =
-    getNextRowSet(FetchOrientation.FETCH_NEXT, KyuubiOperation.DEFAULT_FETCH_MAX_ROWS)
+    getNextRowSet(FetchOrientation.FETCH_NEXT, Operation.DEFAULT_FETCH_MAX_ROWS)
 
 
   /**
-    * Verify if the given fetch orientation is part of the default orientation types.
-    */
+   * Verify if the given fetch orientation is part of the default orientation types.
+   */
   @throws[SparkThriftServerSQLException]
   protected def validateDefaultFetchOrientation(orientation: FetchOrientation): Unit = {
     validateFetchOrientation(orientation, DEFAULT_FETCH_ORIENTATION_SET)
   }
 
   /**
-    * Verify if the given fetch orientation is part of the supported orientation types.
-    */
+   * Verify if the given fetch orientation is part of the supported orientation types.
+   */
   @throws[SparkThriftServerSQLException]
   protected def validateFetchOrientation(orientation: FetchOrientation,
                                          supportedOrientations: Set[FetchOrientation]): Unit = {
@@ -277,7 +277,7 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
   }
 }
 
-object KyuubiOperation {
+object Operation {
   final val DEFAULT_FETCH_ORIENTATION: FetchOrientation = FetchOrientation.FETCH_NEXT
   final val DEFAULT_FETCH_MAX_ROWS = 100
 }

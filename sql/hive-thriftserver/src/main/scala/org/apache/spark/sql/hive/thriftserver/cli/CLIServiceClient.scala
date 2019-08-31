@@ -17,31 +17,34 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-trait CLIServiceClient extends ICLIService{
+import java.util.Collections
 
-  import org.apache.hive.service.auth.HiveAuthFactory
-  import org.apache.hive.service.cli.HiveSQLException
-  import java.util.Collections
+import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
+
+import scala.collection.JavaConverters._
+
+trait CLIServiceClient extends ICLIService {
+
 
   private val DEFAULT_MAX_ROWS = 1000
 
-  @throws[HiveSQLException]
+  @throws[SparkThriftServerSQLException]
   def openSession(username: String, password: String): SessionHandle = {
-    openSession(username, password, Collections.emptyMap[String, String])
+    openSession(username, password, Collections.emptyMap[String, String].asScala.toMap)
   }
 
-  @throws[HiveSQLException]
+  @throws[SparkThriftServerSQLException]
   def fetchResults(opHandle: OperationHandle): RowSet = {
     // TODO: provide STATIC default value
     fetchResults(opHandle, FetchOrientation.FETCH_NEXT, DEFAULT_MAX_ROWS, FetchType.QUERY_OUTPUT)
   }
 
-  @throws[HiveSQLException]
+  @throws[SparkThriftServerSQLException]
   def getDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, owner: String, renewer: String): String
 
-  @throws[HiveSQLException]
+  @throws[SparkThriftServerSQLException]
   def cancelDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit
 
-  @throws[HiveSQLException]
+  @throws[SparkThriftServerSQLException]
   def renewDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit
 }

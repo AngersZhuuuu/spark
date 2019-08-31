@@ -42,7 +42,6 @@ private[hive] class OperationManager
 
   private[this] lazy val logSchema: StructType = new StructType().add("operation_log", "string")
   private[this] val handleToOperation = new ConcurrentHashMap[OperationHandle, Operation]
-  private[this] val userToOperationLog = new ConcurrentHashMap[String, OperationLog]()
   val sessionToContexts = new ConcurrentHashMap[SessionHandle, SQLContext]()
   val sessionToActivePool = new ConcurrentHashMap[SessionHandle, String]()
 
@@ -90,6 +89,16 @@ private[hive] class OperationManager
     operation
   }
 
+  def newGetTypeInfoOperation(parentSession: ThriftSession): SparkGetTypeInfoOperation = synchronized {
+    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      " initialized or had already closed.")
+    val operation = new SparkGetTypeInfoOperation(sqlContext, parentSession)
+    handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created GetTypeInfoOperation with session=$parentSession.")
+    operation
+  }
+
   def newGetCatalogsOperation(parentSession: ThriftSession): SparkGetCatalogsOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
@@ -121,7 +130,7 @@ private[hive] class OperationManager
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       " initialized or had already closed.")
     val operation = new SparkGetTablesOperation(sqlContext, parentSession,
-      catalogName, schemaName, tableName, tableTypes)
+      catalogName, schemaName, tableName, tableTypes.asJava)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetTablesOperation with session=$parentSession.")
     operation

@@ -34,7 +34,6 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.service.CompositeService;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
-import org.apache.hive.service.server.HiveServer2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

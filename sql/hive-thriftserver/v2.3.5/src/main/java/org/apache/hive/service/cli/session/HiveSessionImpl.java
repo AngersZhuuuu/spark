@@ -46,13 +46,9 @@ import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.thrift.ThriftFormatter;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.common.util.HiveVersionInfo;
-import org.apache.hive.service.auth.HiveAuthFactory;
-import org.apache.hive.service.cli.GetInfoType;
-import org.apache.hive.service.cli.GetInfoValue;
 import org.apache.hive.service.cli.operation.GetCrossReferenceOperation;
 import org.apache.hive.service.cli.operation.GetPrimaryKeysOperation;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
-import org.apache.hive.service.server.ThreadWithGarbageCleanup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

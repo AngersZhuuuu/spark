@@ -21,12 +21,12 @@ import java.sql.DatabaseMetaData
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
-import org.apache.hive.service.cli.{CLIServiceUtils, HiveSQLException}
+import org.apache.hive.service.cli.CLIServiceUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
-import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
@@ -35,18 +35,18 @@ import scala.collection.JavaConverters.seqAsJavaListConverter
 /**
  * Spark's own GetFunctionsOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sqlContext    SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName catalog name. null if not applicable
- * @param schemaName database name, null or a concrete database name
- * @param functionName function name pattern
+ * @param catalogName   catalog name. null if not applicable
+ * @param schemaName    database name, null or a concrete database name
+ * @param functionName  function name pattern
  */
 private[hive] class SparkGetFunctionsOperation(
-    sqlContext: SQLContext,
-    parentSession: ThriftSession,
-    catalogName: String,
-    schemaName: String,
-    functionName: String)
+                                                sqlContext: SQLContext,
+                                                parentSession: ThriftSession,
+                                                catalogName: String,
+                                                schemaName: String,
+                                                functionName: String)
   extends SparkMetadataOperation(parentSession, GET_FUNCTIONS) with Logging {
 
   private var statementId: String = _
@@ -101,7 +101,7 @@ private[hive] class SparkGetFunctionsOperation(
         catalog.listFunctions(db, functionPattern).foreach {
           case (funcIdentifier, _) =>
             val info = catalog.lookupFunctionInfo(funcIdentifier)
-            val rowData = Array[AnyRef](
+            val rowData = Row(
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
               db, // FUNCTION_SCHEM
               funcIdentifier.funcName, // FUNCTION_NAME
@@ -113,7 +113,7 @@ private[hive] class SparkGetFunctionsOperation(
       }
       setState(FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: SparkThriftServerSQLException =>
         setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))

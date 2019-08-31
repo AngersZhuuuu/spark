@@ -20,27 +20,27 @@ package org.apache.spark.sql.hive.thriftserver.cli
 import org.apache.hive.service.cli.thrift.TGetInfoType
 
 trait GetInfoType {
-  def tInfoType: TGetInfoType = null
+  def toTGetInfoType: TGetInfoType = null
 }
 
 object GetInfoType {
 
-  case object DBMS_NAME extends GetInfoType {
-    override val tInfoType: TGetInfoType = TGetInfoType.CLI_DBMS_NAME
+  case object CLI_DBMS_NAME extends GetInfoType {
+    override val toTGetInfoType: TGetInfoType = TGetInfoType.CLI_DBMS_NAME
   }
 
-  case object SERVER_NAME extends GetInfoType {
-    override val tInfoType: TGetInfoType = TGetInfoType.CLI_SERVER_NAME
+  case object CLI_SERVER_NAME extends GetInfoType {
+    override val toTGetInfoType: TGetInfoType = TGetInfoType.CLI_SERVER_NAME
   }
 
-  case object DBMS_VERSION extends GetInfoType {
-    override val tInfoType: TGetInfoType = TGetInfoType.CLI_DBMS_VER
+  case object CLI_DBMS_VER extends GetInfoType {
+    override val toTGetInfoType: TGetInfoType = TGetInfoType.CLI_DBMS_VER
   }
 
   def getGetInfoType(tGetInfoType: TGetInfoType): GetInfoType = tGetInfoType match {
-    case DBMS_NAME.tInfoType => DBMS_NAME
-    case SERVER_NAME.tInfoType => SERVER_NAME
-    case DBMS_VERSION.tInfoType => DBMS_VERSION
+    case CLI_DBMS_NAME.toTGetInfoType => CLI_DBMS_NAME
+    case CLI_SERVER_NAME.toTGetInfoType => CLI_SERVER_NAME
+    case CLI_DBMS_VER.toTGetInfoType => CLI_DBMS_VER
     case _ =>
       throw new IllegalArgumentException("Unrecognized Thrift TGetInfoType value: " + tGetInfoType)
   }

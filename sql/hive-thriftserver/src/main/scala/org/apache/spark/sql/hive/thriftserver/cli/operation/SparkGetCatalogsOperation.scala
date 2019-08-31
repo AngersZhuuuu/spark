@@ -20,25 +20,23 @@ package org.apache.spark.sql.hive.thriftserver.cli.operation
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hive.service.cli.HiveSQLException
-import org.apache.hive.service.cli.operation.GetCatalogsOperation
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
-import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own GetCatalogsOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sqlContext    SQLContext to use
  * @param parentSession a HiveSession from SessionManager
  */
 private[hive] class SparkGetCatalogsOperation(
-    sqlContext: SQLContext,
-    parentSession: ThriftSession)
+                                               sqlContext: SQLContext,
+                                               parentSession: ThriftSession)
   extends SparkMetadataOperation(parentSession, GET_CATALOGS) with Logging {
 
   private var statementId: String = _
@@ -74,7 +72,7 @@ private[hive] class SparkGetCatalogsOperation(
       }
       setState(FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: SparkThriftServerSQLException =>
         setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))

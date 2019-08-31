@@ -40,14 +40,13 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-private[hive] class SparkExecuteStatementOperation(
-    parentSession: ThriftSession,
-    statement: String,
-    confOverlay: JMap[String, String],
-    runInBackground: Boolean = true)
-    (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
+private[hive] class SparkExecuteStatementOperation(parentSession: ThriftSession,
+                                                   statement: String,
+                                                   confOverlay: JMap[String, String],
+                                                   runInBackground: Boolean = true)
+                                                  (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
   extends Operation(parentSession, EXECUTE_STATEMENT, runInBackground)
-  with Logging {
+    with Logging {
 
   private var result: DataFrame = _
 
@@ -60,7 +59,7 @@ private[hive] class SparkExecuteStatementOperation(
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
-  override def registerCurrentOperationLog(): Unit = {
+  def registerCurrentOperationLog(): Unit = {
     if (_isOperationLogEnabled) {
       if (_operationLog == null) {
         logWarning("Failed to get current OperationLog object of Operation: "
@@ -260,7 +259,7 @@ private[hive] class SparkExecuteStatementOperation(
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
-        val currentState = getStatus().getState()
+        val currentState = getStatus.getState
         logError(s"Error executing query, currentState $currentState, ", e)
         setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
@@ -279,7 +278,7 @@ private[hive] class SparkExecuteStatementOperation(
   private def cleanup(state: cli.OperationState) {
     setState(state)
     if (runInBackground) {
-      val backgroundHandle = getBackgroundHandle()
+      val backgroundHandle = getBackgroundHandle
       if (backgroundHandle != null) {
         backgroundHandle.cancel(true)
       }

@@ -42,8 +42,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.CookieSigner;
 import org.apache.hive.service.auth.AuthenticationProviderFactory;
 import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods;
-import org.apache.hive.service.auth.HiveAuthFactory;
-import org.apache.hive.service.auth.HttpAuthUtils;
 import org.apache.hive.service.auth.HttpAuthenticationException;
 import org.apache.hive.service.auth.PasswdAuthenticationProvider;
 import org.apache.hive.service.cli.session.SessionManager;

@@ -18,37 +18,47 @@
 package org.apache.spark.sql.hive.thriftserver.cli.operation
 
 import java.util.UUID
-import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hive.service.cli.CLIServiceUtils
+import org.apache.hive.service.cli.Type
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
- * Spark's own GetSchemasOperation
+ * Spark's own GetTableTypesOperation
  *
  * @param sqlContext    SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName   catalog name. null if not applicable.
- * @param schemaName    database name, null or a concrete database name
  */
-private[hive] class SparkGetSchemasOperation(
-                                              sqlContext: SQLContext,
-                                              parentSession: ThriftSession,
-                                              catalogName: String,
-                                              schemaName: String)
-  extends SparkMetadataOperation(parentSession, GET_SCHEMAS) with Logging {
+private[hive] class SparkGetTypeInfoOperation(sqlContext: SQLContext,
+                                              parentSession: ThriftSession)
+  extends SparkMetadataOperation(parentSession, GET_TYPE_INFO) with SparkMetadataOperationUtils with Logging {
 
   private var statementId: String = _
   private val RESULT_SET_SCHEMA = new StructType()
-    .add(StructField("TABLE_SCHEM", StringType))
-    .add(StructField("TABLE_CATALOG", StringType))
+    .add(StructField("TYPE_NAME", StringType))
+    .add(StructField("DATA_TYPE", IntegerType))
+    .add(StructField("PRECISION", IntegerType))
+    .add(StructField("LITERAL_PREFIX", StringType))
+    .add(StructField("LITERAL_SUFFIX", StringType))
+    .add(StructField("CREATE_PARAMS", StringType))
+    .add(StructField("NULLABLE", ShortType))
+    .add(StructField("CASE_SENSITIVE", BooleanType))
+    .add(StructField("SEARCHABLE", ShortType))
+    .add(StructField("UNSIGNED_ATTRIBUTE", BooleanType))
+    .add(StructField("FIXED_PREC_SCALE", BooleanType))
+    .add(StructField("AUTO_INCREMENT", BooleanType))
+    .add(StructField("LOCAL_TYPE_NAME", StringType))
+    .add(StructField("MINIMUM_SCALE", ShortType))
+    .add(StructField("MAXIMUM_SCALE", ShortType))
+    .add(StructField("SQL_DATA_TYPE", IntegerType))
+    .add(StructField("SQL_DATETIME_SUB", IntegerType))
+    .add(StructField("NUM_PREC_RADIX", IntegerType))
 
 
   private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
@@ -60,9 +70,7 @@ private[hive] class SparkGetSchemasOperation(
 
   override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString
-    // Do not change cmdStr. It's used for Hive auditing and authorization.
-    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
-    val logMsg = s"Listing databases '$cmdStr'"
+    val logMsg = "Listing types"
     logInfo(s"$logMsg with $statementId")
     setState(RUNNING)
     // Always use the latest class loader provided by executionHive's state.
@@ -70,7 +78,7 @@ private[hive] class SparkGetSchemasOperation(
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     if (isAuthV2Enabled) {
-      authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
+      authorizeMetaGets(HiveOperationType.GET_TYPEINFO, null)
     }
 
     HiveThriftServer2.listener.onStatementStart(
@@ -81,16 +89,28 @@ private[hive] class SparkGetSchemasOperation(
       parentSession.getUsername)
 
     try {
-      val schemaPattern = convertSchemaPattern(schemaName)
-      sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
-        rowSet.addRow(Row(dbName, DEFAULT_HIVE_CATALOG))
-      }
-
-      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
-      val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
-      if (databasePattern.matcher(globalTempViewDb).matches()) {
-        rowSet.addRow(Row(globalTempViewDb, DEFAULT_HIVE_CATALOG))
-      }
+      Type.values().foreach(typeValue => {
+        val rowData = Row(typeValue.getName, // TYPE_NAME
+          typeValue.toJavaSQLType, // DATA_TYPE
+          typeValue.getMaxPrecision, // PRECISION
+          typeValue.getLiteralPrefix, // LITERAL_PREFIX
+          typeValue.getLiteralSuffix, // LITERAL_SUFFIX
+          typeValue.getCreateParams, // CREATE_PARAMS
+          typeValue.getNullable, // NULLABLE
+          typeValue.isCaseSensitive, // CASE_SENSITIVE
+          typeValue.getSearchable, // SEARCHABLE
+          typeValue.isUnsignedAttribute, // UNSIGNED_ATTRIBUTE
+          typeValue.isFixedPrecScale, // FIXED_PREC_SCALE
+          typeValue.isAutoIncrement, // AUTO_INCREMENT
+          typeValue.getLocalizedName, // LOCAL_TYPE_NAME
+          typeValue.getMinimumScale, // MINIMUM_SCALE
+          typeValue.getMaximumScale, // MAXIMUM_SCALE
+          null, // SQL_DATA_TYPE, unused
+          null, // SQL_DATETIME_SUB, unused
+          typeValue.getNumPrecRadix //NUM_PREC_RADIX
+        )
+        rowSet.addRow(rowData)
+      })
       setState(FINISHED)
     } catch {
       case e: SparkThriftServerSQLException =>

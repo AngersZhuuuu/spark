@@ -34,10 +34,9 @@ import org.apache.hadoop.hive.metastore.api.MetaException
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge.Server.ServerMode
 import org.apache.hadoop.hive.thrift.{DBTokenStore, HadoopThriftAuthBridge}
-import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hadoop.security.authorize.ProxyUsers
-import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
-import org.apache.hive.service.auth.{KerberosSaslHelper, PlainSaslHelper, SaslQOP}
+import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
+import org.apache.hive.service.auth.SaslQOP
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.ThriftCLIService
@@ -55,10 +54,6 @@ class HiveAuthFactory extends Logging {
   private var conf: HiveConf = null
 
 
-  private var keytabFile: Field = null
-  private var getKeytab: Method = null
-
-
   def this(hiveConf: HiveConf) {
     this()
     this.conf = conf
@@ -66,10 +61,10 @@ class HiveAuthFactory extends Logging {
     authTypeStr = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_AUTHENTICATION)
 
     // In http mode we use NOSASL as the default auth type
-    if ("http".equalsIgnoreCase(transportMode)) if (authTypeStr == null) authTypeStr = AuthTypes.NOSASL.getAuthName
+    if ("http".equalsIgnoreCase(transportMode)) if (authTypeStr == null) authTypeStr = NOSASL.getAuthName
     else {
-      if (authTypeStr == null) authTypeStr = AuthTypes.NONE.getAuthName
-      if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName)) {
+      if (authTypeStr == null) authTypeStr = NONE.getAuthName
+      if (authTypeStr.equalsIgnoreCase(KERBEROS.getAuthName)) {
         val principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
         val keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
         if (needUgiLogin(UserGroupInformation.getCurrentUser, SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) saslServer = ShimLoader.getHadoopThriftAuthBridge.createServer(principal, keytab)
@@ -104,22 +99,22 @@ class HiveAuthFactory extends Logging {
   @throws[LoginException]
   def getAuthTransFactory: TTransportFactory = {
     var transportFactory: TTransportFactory = null
-    if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName)) {
+    if (authTypeStr.equalsIgnoreCase(KERBEROS.getAuthName)) {
       try {
         transportFactory = saslServer.createTransportFactory(getSaslProperties)
       } catch {
         case e: TTransportException =>
           throw new LoginException(e.getMessage)
       }
-    } else if (authTypeStr.equalsIgnoreCase(AuthTypes.NONE.getAuthName)) {
+    } else if (authTypeStr.equalsIgnoreCase(NONE.getAuthName)) {
       transportFactory = PlainSaslHelper.getPlainTransportFactory(authTypeStr)
-    } else if (authTypeStr.equalsIgnoreCase(AuthTypes.LDAP.getAuthName)) {
+    } else if (authTypeStr.equalsIgnoreCase(LDAP.getAuthName)) {
       transportFactory = PlainSaslHelper.getPlainTransportFactory(authTypeStr)
-    } else if (authTypeStr.equalsIgnoreCase(AuthTypes.PAM.getAuthName)) {
+    } else if (authTypeStr.equalsIgnoreCase(PAM.getAuthName)) {
       transportFactory = PlainSaslHelper.getPlainTransportFactory(authTypeStr)
-    } else if (authTypeStr.equalsIgnoreCase(AuthTypes.NOSASL.getAuthName)) {
+    } else if (authTypeStr.equalsIgnoreCase(NOSASL.getAuthName)) {
       transportFactory = new TTransportFactory()
-    } else if (authTypeStr.equalsIgnoreCase(AuthTypes.CUSTOM.getAuthName)) {
+    } else if (authTypeStr.equalsIgnoreCase(CUSTOM.getAuthName)) {
       transportFactory = PlainSaslHelper.getPlainTransportFactory(authTypeStr)
     } else {
       throw new LoginException("Unsupported authentication type " + authTypeStr)
@@ -128,15 +123,15 @@ class HiveAuthFactory extends Logging {
   }
 
   /**
-    * Returns the thrift processor factory for HiveServer2 running in binary mode
-    *
-    * @param service
-    * @return
-    * @throws LoginException
-    */
+   * Returns the thrift processor factory for HiveServer2 running in binary mode
+   *
+   * @param service
+   * @return
+   * @throws LoginException
+   */
   @throws[LoginException]
   def getAuthProcFactory(service: ThriftCLIService): TProcessorFactory = {
-    if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName)) {
+    if (authTypeStr.equalsIgnoreCase(KERBEROS.getAuthName)) {
       KerberosSaslHelper.getKerberosProcessorFactory(saslServer, service)
     } else {
       PlainSaslHelper.getPlainProcessorFactory(service)
@@ -154,23 +149,6 @@ class HiveAuthFactory extends Logging {
   def getIpAddress: String = if (saslServer == null || saslServer.getRemoteAddress == null) null
   else saslServer.getRemoteAddress.getHostAddress
 
-  // Perform kerberos login using the hadoop shim API if the configuration is available
-  @throws[IOException]
-  def loginFromKeytab(hiveConf: HiveConf): Unit = {
-    val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
-    val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
-    if (principal.isEmpty || keyTabFile.isEmpty) throw new IOException("HiveServer2 Kerberos principal or keytab is not correctly configured")
-    else UserGroupInformation.loginUserFromKeytab(SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
-  }
-
-  // Perform SPNEGO login using the hadoop shim API if the configuration is available
-  @throws[IOException]
-  def loginFromSpnegoKeytabAndReturnUGI(hiveConf: HiveConf): UserGroupInformation = {
-    val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL)
-    val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB)
-    if (principal.isEmpty || keyTabFile.isEmpty) throw new IOException("HiveServer2 SPNEGO principal or keytab is not correctly configured")
-    else UserGroupInformation.loginUserFromKeytabAndReturnUGI(SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
-  }
 
   def getSocketTransport(host: String, port: Int, loginTimeout: Int): TSocket = {
     new TSocket(host, port, loginTimeout)
@@ -230,34 +208,16 @@ class HiveAuthFactory extends Logging {
     }
   }
 
-  def needUgiLogin(ugi: UserGroupInformation, principal: String, keytab: String): Boolean = {
-    null == ugi ||
-      !ugi.hasKerberosCredentials ||
-      !(ugi.getUserName == principal) ||
-      !Objects.equals(keytab, getKeytabFromUgi)
-  }
 
-  private def getKeytabFromUgi = synchronized(classOf[UserGroupInformation]) {
-    try {
-      if (keytabFile != null) {
-        keytabFile.get(null).asInstanceOf[String]
-      } else if (getKeytab != null) {
-        getKeytab.invoke(UserGroupInformation.getCurrentUser).asInstanceOf[String]
-      } else {
-        null
-      }
-    } catch {
-      case e: Exception =>
-        logDebug("Fail to get keytabFile path via reflection", e)
-        null
-    }
-
-  }
 }
 
 object HiveAuthFactory extends Logging {
   val HS2_PROXY_USER = "hive.server2.proxy.user"
   val HS2_CLIENT_TOKEN = "hiveserver2ClientToken"
+
+  private var keytabFile: Field = null
+  private var getKeytab: Method = null
+
 
   @throws[SparkThriftServerSQLException]
   def verifyProxyAccess(realUser: String, proxyUser: String, ipAddress: String, hiveConf: HiveConf): Unit = {
@@ -339,8 +299,50 @@ object HiveAuthFactory extends Logging {
         }
       }
       sslServerSocket.setEnabledProtocols(enabledProtocols.toArray(new Array[String](0)))
-      logInfo("SSL Server Socket Enabled Protocols: " + util.Arrays.toString(sslServerSocket.getEnabledProtocols()))
+      logInfo("SSL Server Socket Enabled Protocols: " + sslServerSocket.getEnabledProtocols.mkString(","))
     }
     thriftServerSocket
+  }
+
+  // Perform kerberos login using the hadoop shim API if the configuration is available
+  @throws[IOException]
+  def loginFromKeytab(hiveConf: HiveConf): Unit = {
+    val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
+    val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
+    if (principal.isEmpty || keyTabFile.isEmpty) throw new IOException("HiveServer2 Kerberos principal or keytab is not correctly configured")
+    else UserGroupInformation.loginUserFromKeytab(SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
+  }
+
+  // Perform SPNEGO login using the hadoop shim API if the configuration is available
+  @throws[IOException]
+  def loginFromSpnegoKeytabAndReturnUGI(hiveConf: HiveConf): UserGroupInformation = {
+    val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL)
+    val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB)
+    if (principal.isEmpty || keyTabFile.isEmpty) throw new IOException("HiveServer2 SPNEGO principal or keytab is not correctly configured")
+    else UserGroupInformation.loginUserFromKeytabAndReturnUGI(SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
+  }
+
+  def needUgiLogin(ugi: UserGroupInformation, principal: String, keytab: String): Boolean = {
+    null == ugi ||
+      !ugi.hasKerberosCredentials ||
+      !(ugi.getUserName == principal) ||
+      !Objects.equals(keytab, getKeytabFromUgi)
+  }
+
+  private def getKeytabFromUgi = synchronized(classOf[UserGroupInformation]) {
+    try {
+      if (keytabFile != null) {
+        keytabFile.get(null).asInstanceOf[String]
+      } else if (getKeytab != null) {
+        getKeytab.invoke(UserGroupInformation.getCurrentUser).asInstanceOf[String]
+      } else {
+        null
+      }
+    } catch {
+      case e: Exception =>
+        logDebug("Fail to get keytabFile path via reflection", e)
+        null
+    }
+
   }
 }

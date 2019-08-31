@@ -22,16 +22,15 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
-import org.apache.hive.service.cli.{CLIServiceUtils, HiveSQLException}
-import org.apache.hive.service.cli.operation.GetColumnsOperation
+import org.apache.hive.service.cli.CLIServiceUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
-import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
 
@@ -40,20 +39,20 @@ import scala.collection.JavaConverters.seqAsJavaListConverter
 /**
  * Spark's own SparkGetColumnsOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sqlContext    SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName catalog name. NULL if not applicable.
- * @param schemaName database name, NULL or a concrete database name
- * @param tableName table name
- * @param columnName column name
+ * @param catalogName   catalog name. NULL if not applicable.
+ * @param schemaName    database name, NULL or a concrete database name
+ * @param tableName     table name
+ * @param columnName    column name
  */
 private[hive] class SparkGetColumnsOperation(
-    sqlContext: SQLContext,
-    parentSession: ThriftSession,
-    catalogName: String,
-    schemaName: String,
-    tableName: String,
-    columnName: String)
+                                              sqlContext: SQLContext,
+                                              parentSession: ThriftSession,
+                                              catalogName: String,
+                                              schemaName: String,
+                                              tableName: String,
+                                              columnName: String)
   extends SparkMetadataOperation(parentSession, GET_COLUMNS)
     with Logging {
 
@@ -156,7 +155,7 @@ private[hive] class SparkGetColumnsOperation(
       }
       setState(FINISHED)
     } catch {
-      case e: HiveSQLException =>
+      case e: SparkThriftServerSQLException =>
         setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
@@ -166,14 +165,14 @@ private[hive] class SparkGetColumnsOperation(
   }
 
   private def addToRowSet(
-      columnPattern: Pattern,
-      dbName: String,
-      tableName: String,
-      schema: StructType): Unit = {
+                           columnPattern: Pattern,
+                           dbName: String,
+                           tableName: String,
+                           schema: StructType): Unit = {
     schema.foreach { column =>
       if (columnPattern != null && !columnPattern.matcher(column.name).matches()) {
       } else {
-        val rowData = Array[AnyRef](
+        val rowData = Row(
           null, // TABLE_CAT
           dbName, // TABLE_SCHEM
           tableName, // TABLE_NAME
