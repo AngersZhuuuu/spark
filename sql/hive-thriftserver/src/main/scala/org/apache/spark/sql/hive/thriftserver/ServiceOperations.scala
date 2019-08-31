@@ -91,23 +91,24 @@ object ServiceOperations extends Logging {
 
       }
     }
-
-    /**
-     * Stop a service; if it is null do nothing. Exceptions are caught and
-     * logged at warn level. (but not Throwables). This operation is intended to
-     * be used in cleanup operations
-     *
-     * @param service a service; may be null
-     * @return any exception that was caught; null if none was.
-     */
-    def stopQuietly(service: Service): Exception = {
-      try {
-        stop(service)
-      } catch {
-        case e: Exception =>
-          logWarning("When stopping the service " + service.getName + " : " + e, e)
-          return e
-      }
-      null
-    }
   }
+
+  /**
+   * Stop a service; if it is null do nothing. Exceptions are caught and
+   * logged at warn level. (but not Throwables). This operation is intended to
+   * be used in cleanup operations
+   *
+   * @param service a service; may be null
+   * @return any exception that was caught; null if none was.
+   */
+  def stopQuietly(service: Service): Exception = {
+    try {
+      stop(service)
+    } catch {
+      case e: Exception =>
+        logWarning("When stopping the service " + service.getName + " : " + e, e)
+        return e
+    }
+    null
+  }
+}
