@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift._
 import org.apache.hive.service.{ServiceException, ServiceUtils}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.AbstractService
+import org.apache.spark.sql.hive.thriftserver.{AbstractService, ServiceUtils}
 import org.apache.spark.sql.hive.thriftserver.auth.{HiveAuthFactory, KERBEROS, NONE, TSetIpAddressProcessor}
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
@@ -245,16 +245,16 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   }
 
   /**
-    * Returns the effective username.
-    * 1. If hive.server2.allow.user.substitution = false: the username of the connecting user
-    * 2. If hive.server2.allow.user.substitution = true: the username of the end user,
-    * that the connecting user is trying to proxy for.
-    * This includes a check whether the connecting user is allowed to proxy for the end user.
-    *
-    * @param req
-    * @return
-    * @throws SparkThriftServerSQLException
-    */
+   * Returns the effective username.
+   * 1. If hive.server2.allow.user.substitution = false: the username of the connecting user
+   * 2. If hive.server2.allow.user.substitution = true: the username of the end user,
+   * that the connecting user is trying to proxy for.
+   * This includes a check whether the connecting user is allowed to proxy for the end user.
+   *
+   * @param req
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
   @throws[SparkThriftServerSQLException]
   private def getUserName(req: TOpenSessionReq): String = {
     var userName: String = null
@@ -291,15 +291,15 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   }
 
   /**
-    * Create a session handle
-    *
-    * @param req
-    * @param res
-    * @return
-    * @throws SparkThriftServerSQLException
-    * @throws LoginException
-    * @throws IOException
-    */
+   * Create a session handle
+   *
+   * @param req
+   * @param res
+   * @return
+   * @throws SparkThriftServerSQLException
+   * @throws LoginException
+   * @throws IOException
+   */
   @throws[SparkThriftServerSQLException]
   @throws[LoginException]
   @throws[IOException]
@@ -631,14 +631,14 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   override def run(): Unit
 
   /**
-    * If the proxy user name is provided then check privileges to substitute the user.
-    *
-    * @param realUser
-    * @param sessionConf
-    * @param ipAddress
-    * @return
-    * @throws SparkThriftServerSQLException
-    */
+   * If the proxy user name is provided then check privileges to substitute the user.
+   *
+   * @param realUser
+   * @param sessionConf
+   * @param ipAddress
+   * @return
+   * @throws SparkThriftServerSQLException
+   */
   @throws[SparkThriftServerSQLException]
   private def getProxyUser(realUser: String, sessionConf: util.Map[String, String], ipAddress: String): String = {
     var proxyUser: String = null

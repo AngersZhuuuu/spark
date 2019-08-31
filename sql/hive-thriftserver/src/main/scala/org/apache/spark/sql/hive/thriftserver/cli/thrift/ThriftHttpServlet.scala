@@ -31,10 +31,10 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hive.service.CookieSigner
 import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods
 import org.apache.hive.service.auth._
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.thriftserver.CookieSigner
 import org.apache.spark.sql.hive.thriftserver.auth.{HttpAuthUtils, KERBEROS, NOSASL}
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 import org.apache.thrift.TProcessor
