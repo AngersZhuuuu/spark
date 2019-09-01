@@ -183,21 +183,78 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   @throws[TException]
   override def GetDelegationToken(req: TGetDelegationTokenReq): TGetDelegationTokenResp = {
     val resp: TGetDelegationTokenResp = new TGetDelegationTokenResp
-    resp.setStatus(notSupportTokenErrorStatus)
+    if (hiveAuthFactory == null) {
+      resp.setStatus(notSupportTokenErrorStatus)
+    } else {
+      try {
+        val token = cliService.getDelegationToken(
+          new SessionHandle(req.getSessionHandle),
+          hiveAuthFactory,
+          req.getOwner,
+          req.getRenewer,
+          getIpAddress)
+        resp.setDelegationToken(token)
+        resp.setStatus(OK_STATUS)
+      } catch {
+        case e: SparkThriftServerSQLException =>
+          logError("Error obtaining delegation token", e)
+          val tokenErrorStatus = SparkThriftServerSQLException.toTStatus(e)
+          tokenErrorStatus.setSqlState(e.getSQLState)
+          tokenErrorStatus.setErrorCode(e.getErrorCode)
+          tokenErrorStatus.setErrorMessage(e.getMessage)
+          resp.setStatus(tokenErrorStatus)
+      }
+    }
     resp
   }
 
   @throws[TException]
   override def CancelDelegationToken(req: TCancelDelegationTokenReq): TCancelDelegationTokenResp = {
     val resp: TCancelDelegationTokenResp = new TCancelDelegationTokenResp
-    resp.setStatus(notSupportTokenErrorStatus)
+    if (hiveAuthFactory == null) {
+      resp.setStatus(notSupportTokenErrorStatus)
+    } else {
+      try {
+        cliService.cancelDelegationToken(
+          new SessionHandle(req.getSessionHandle),
+          hiveAuthFactory,
+          req.getDelegationToken)
+        resp.setStatus(OK_STATUS)
+      } catch {
+        case e: SparkThriftServerSQLException =>
+          logError("Error cancel delegation token", e)
+          val tokenErrorStatus = SparkThriftServerSQLException.toTStatus(e)
+          tokenErrorStatus.setSqlState(e.getSQLState)
+          tokenErrorStatus.setErrorCode(e.getErrorCode)
+          tokenErrorStatus.setErrorMessage(e.getMessage)
+          resp.setStatus(tokenErrorStatus)
+      }
+    }
     resp
   }
 
   @throws[TException]
   override def RenewDelegationToken(req: TRenewDelegationTokenReq): TRenewDelegationTokenResp = {
     val resp: TRenewDelegationTokenResp = new TRenewDelegationTokenResp
-    resp.setStatus(notSupportTokenErrorStatus)
+    if (hiveAuthFactory == null) {
+      resp.setStatus(notSupportTokenErrorStatus)
+    } else {
+      try {
+        cliService.renewDelegationToken(
+          new SessionHandle(req.getSessionHandle),
+          hiveAuthFactory,
+          req.getDelegationToken)
+        resp.setStatus(OK_STATUS)
+      } catch {
+        case e: SparkThriftServerSQLException =>
+          logError("Error renew delegation token", e)
+          val tokenErrorStatus = SparkThriftServerSQLException.toTStatus(e)
+          tokenErrorStatus.setSqlState(e.getSQLState)
+          tokenErrorStatus.setErrorCode(e.getErrorCode)
+          tokenErrorStatus.setErrorMessage(e.getMessage)
+          resp.setStatus(tokenErrorStatus)
+      }
+    }
     resp
   }
 
@@ -235,8 +292,7 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     // We set the thread local ip address, in ThriftHttpServlet.
     if (cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
       clientIpAddress = SessionManager.getIpAddress
-    }
-    else { // Kerberos
+    } else { // Kerberos
       if (isKerberosAuthMode) {
         clientIpAddress = hiveAuthFactory.getIpAddress
       } else { // Except kerberos, NOSASL

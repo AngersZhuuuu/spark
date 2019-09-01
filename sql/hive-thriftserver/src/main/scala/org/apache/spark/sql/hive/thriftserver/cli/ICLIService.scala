@@ -118,15 +118,26 @@ trait ICLIService {
   def fetchResults(opHandle: OperationHandle): RowSet
 
   @throws[SparkThriftServerSQLException]
-  def fetchResults(opHandle: OperationHandle, orientation: FetchOrientation, maxRows: Long, fetchType: FetchType): RowSet
+  def fetchResults(opHandle: OperationHandle,
+                   orientation: FetchOrientation,
+                   maxRows: Long,
+                   fetchType: FetchType): RowSet
 
   @throws[SparkThriftServerSQLException]
-  def getDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, owner: String, renewer: String): String
+  def getDelegationToken(sessionHandle: SessionHandle,
+                         authFactory: HiveAuthFactory,
+                         owner: String,
+                         renewer: String,
+                         remoteAddr: String): String
 
   @throws[SparkThriftServerSQLException]
-  def cancelDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit
+  def cancelDelegationToken(sessionHandle: SessionHandle,
+                            authFactory: HiveAuthFactory,
+                            tokenStr: String): Unit
 
   @throws[SparkThriftServerSQLException]
-  def renewDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit
+  def renewDelegationToken(sessionHandle: SessionHandle,
+                           authFactory: HiveAuthFactory,
+                           tokenStr: String): Unit
 
 }

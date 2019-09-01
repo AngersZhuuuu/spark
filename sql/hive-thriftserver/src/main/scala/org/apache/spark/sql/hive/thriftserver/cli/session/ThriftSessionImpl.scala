@@ -564,9 +564,9 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     }
   }
 
-  override def getDelegationToken(authFactory: HiveAuthFactory, owner: String, renewer: String): String = {
+  override def getDelegationToken(authFactory: HiveAuthFactory, owner: String, renewer: String, remoteAddr: String): String = {
     HiveAuthFactory.verifyProxyAccess(getUsername, owner, getIpAddress, getHiveConf)
-    authFactory.getDelegationToken(owner, renewer)
+    authFactory.getDelegationToken(owner, renewer, remoteAddr)
   }
 
   override def cancelDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit = {

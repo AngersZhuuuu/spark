@@ -153,8 +153,9 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
   @throws[SparkThriftServerSQLException]
   override def getDelegationToken(authFactory: HiveAuthFactory,
                                   owner: String,
-                                  renewer: String): String = {
-    authFactory.getDelegationToken(owner, renewer)
+                                  renewer: String,
+                                  remoteAddr: String): String = {
+    authFactory.getDelegationToken(owner, renewer, remoteAddr)
   }
 
   @throws[SparkThriftServerSQLException]

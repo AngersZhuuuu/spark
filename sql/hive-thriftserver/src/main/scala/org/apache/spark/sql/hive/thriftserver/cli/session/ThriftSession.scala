@@ -200,7 +200,8 @@ trait ThriftSession extends ThriftSessionBase {
   def getDelegationToken(authFactory:
                          HiveAuthFactory,
                          owner: String,
-                         renewer: String): String
+                         renewer: String,
+                         remoteAddr: String): String
 
   @throws[SparkThriftServerSQLException]
   def cancelDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit

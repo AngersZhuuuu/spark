@@ -38,6 +38,7 @@ import org.apache.hadoop.security.authorize.ProxyUsers
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hive.service.auth.SaslQOP
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.thriftserver.ReflectionUtils
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.ThriftCLIService
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.thrift.TProcessorFactory
@@ -49,6 +50,7 @@ class HiveAuthFactory extends Logging {
   import HiveAuthFactory._
 
   private var saslServer: HadoopThriftAuthBridge.Server = null
+  private var delegationTokenManager: HiveDelegationTokenManager = null
   private var authTypeStr: String = null
   private var transportMode: String = null
   private var conf: HiveConf = null
@@ -61,28 +63,37 @@ class HiveAuthFactory extends Logging {
     authTypeStr = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_AUTHENTICATION)
 
     // In http mode we use NOSASL as the default auth type
-    if ("http".equalsIgnoreCase(transportMode)) if (authTypeStr == null) authTypeStr = NOSASL.getAuthName
-    else {
-      if (authTypeStr == null) authTypeStr = NONE.getAuthName
-      if (authTypeStr.equalsIgnoreCase(KERBEROS.getAuthName)) {
-        val principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
-        val keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
-        if (needUgiLogin(UserGroupInformation.getCurrentUser, SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) saslServer = ShimLoader.getHadoopThriftAuthBridge.createServer(principal, keytab)
-        else { // Using the default constructor to avoid unnecessary UGI login.
-          saslServer = new HadoopThriftAuthBridge.Server
+    if ("http".equalsIgnoreCase(transportMode)) {
+      if (authTypeStr == null) {
+        authTypeStr = NOSASL.getAuthName
+      } else {
+        if (authTypeStr == null) {
+          authTypeStr = NONE.getAuthName
         }
-        // start delegation token manager
-        try { // rawStore is only necessary for DBTokenStore
-          var rawStore: Any = null
-          val tokenStoreClass = conf.getVar(HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS)
-          if (tokenStoreClass == classOf[DBTokenStore].getName) {
-            val baseHandler: HMSHandler = new HiveMetaStore.HMSHandler("new db based metaserver", conf, true)
-            rawStore = baseHandler.getMS
+        if (authTypeStr.equalsIgnoreCase(KERBEROS.getAuthName)) {
+          val principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
+          val keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
+          if (needUgiLogin(UserGroupInformation.getCurrentUser, SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
+            saslServer = ShimLoader.getHadoopThriftAuthBridge.createServer(principal, keytab)
+          } else { // Using the default constructor to avoid unnecessary UGI login.
+            saslServer = new HadoopThriftAuthBridge.Server
           }
-          saslServer.startDelegationTokenSecretManager(conf, rawStore, ServerMode.HIVESERVER2)
-        } catch {
-          case e@(_: MetaException | _: IOException) =>
-            throw new TTransportException("Failed to start token manager", e)
+
+          delegationTokenManager = new HiveDelegationTokenManager()
+          // start delegation token manager
+          try { // rawStore is only necessary for DBTokenStore
+            var rawStore: Any = null
+            val tokenStoreClass = conf.getVar(HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS)
+            if (tokenStoreClass == classOf[DBTokenStore].getName) {
+              val baseHandler: HMSHandler = new HiveMetaStore.HMSHandler("new db based metaserver", conf, true)
+              rawStore = baseHandler.getMS
+            }
+            delegationTokenManager.startDelegationTokenSecretManager(conf, rawStore, ServerMode.HIVESERVER2)
+            ReflectionUtils.setSuperField(saslServer, "secretManager", delegationTokenManager)
+          } catch {
+            case e@(_: MetaException | _: IOException) =>
+              throw new TTransportException("Failed to start token manager", e)
+          }
         }
       }
     }
@@ -146,8 +157,13 @@ class HiveAuthFactory extends Logging {
     }
   }
 
-  def getIpAddress: String = if (saslServer == null || saslServer.getRemoteAddress == null) null
-  else saslServer.getRemoteAddress.getHostAddress
+  def getIpAddress: String = {
+    if (saslServer == null || saslServer.getRemoteAddress == null) {
+      null
+    } else {
+      saslServer.getRemoteAddress.getHostAddress
+    }
+  }
 
 
   def getSocketTransport(host: String, port: Int, loginTimeout: Int): TSocket = {
@@ -156,12 +172,17 @@ class HiveAuthFactory extends Logging {
 
   // retrieve delegation token for the given user
   @throws[SparkThriftServerSQLException]
-  def getDelegationToken(owner: String, renewer: String): String = {
-    if (saslServer == null) {
+  def getDelegationToken(owner: String, renewer: String, remoteAddr: String): String = {
+    if (delegationTokenManager == null) {
       throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
     }
     try {
-      val tokenStr = saslServer.getDelegationTokenWithService(owner, renewer, HS2_CLIENT_TOKEN)
+      val tokenStr =
+        delegationTokenManager.getDelegationTokenWithService(
+          owner,
+          renewer,
+          HS2_CLIENT_TOKEN,
+          remoteAddr)
       if (tokenStr == null || tokenStr.isEmpty) {
         throw new SparkThriftServerSQLException("Received empty retrieving delegation token for user " + owner, "08S01")
       }
@@ -177,9 +198,9 @@ class HiveAuthFactory extends Logging {
   // cancel given delegation token
   @throws[SparkThriftServerSQLException]
   def cancelDelegationToken(delegationToken: String): Unit = {
-    if (saslServer == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
+    if (delegationTokenManager == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
     try {
-      saslServer.cancelDelegationToken(delegationToken)
+      delegationTokenManager.cancelDelegationToken(delegationToken)
     } catch {
       case e: IOException =>
         throw new SparkThriftServerSQLException("Error canceling delegation token " + delegationToken, "08S01", e)
@@ -188,9 +209,9 @@ class HiveAuthFactory extends Logging {
 
   @throws[SparkThriftServerSQLException]
   def renewDelegationToken(delegationToken: String): Unit = {
-    if (saslServer == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
+    if (delegationTokenManager == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
     try {
-      saslServer.renewDelegationToken(delegationToken)
+      delegationTokenManager.renewDelegationToken(delegationToken)
     } catch {
       case e: IOException =>
         throw new SparkThriftServerSQLException("Error renewing delegation token " + delegationToken, "08S01", e)
@@ -199,9 +220,9 @@ class HiveAuthFactory extends Logging {
 
   @throws[SparkThriftServerSQLException]
   def getUserFromToken(delegationToken: String): String = {
-    if (saslServer == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
+    if (delegationTokenManager == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
     try {
-      saslServer.getUserFromToken(delegationToken)
+      delegationTokenManager.getUserFromToken(delegationToken)
     } catch {
       case e: IOException =>
         throw new SparkThriftServerSQLException("Error extracting user from delegation token " + delegationToken, "08S01", e)

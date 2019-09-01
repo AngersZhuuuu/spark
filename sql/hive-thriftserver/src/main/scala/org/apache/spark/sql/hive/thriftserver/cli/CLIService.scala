@@ -426,8 +426,8 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
 
 
   @throws[SparkThriftServerSQLException]
-  override def getDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, owner: String, renewer: String): String = {
-    val delegationToken = sessionManager.getSession(sessionHandle).getDelegationToken(authFactory, owner, renewer)
+  override def getDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, owner: String, renewer: String, remoteAddr: String): String = {
+    val delegationToken = sessionManager.getSession(sessionHandle).getDelegationToken(authFactory, owner, renewer, remoteAddr)
     logInfo(sessionHandle + ": getDelegationToken()")
     delegationToken
   }
