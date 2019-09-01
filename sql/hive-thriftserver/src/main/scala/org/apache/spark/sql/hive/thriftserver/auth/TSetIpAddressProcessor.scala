@@ -63,9 +63,11 @@ class TSetIpAddressProcessor[I <: Iface](val iface: Iface)
 
   private def setUserName(in: TProtocol): Unit = {
     val transport: TTransport = in.getTransport
-    if (transport.isInstanceOf[TSaslServerTransport]) {
-      val userName = transport.asInstanceOf[TSaslServerTransport].getSaslServer.getAuthorizationID
-      TSetIpAddressProcessor.THREAD_LOCAL_USER_NAME.set(userName)
+    transport match {
+      case transport1: TSaslServerTransport =>
+        val userName = transport1.getSaslServer.getAuthorizationID
+        TSetIpAddressProcessor.THREAD_LOCAL_USER_NAME.set(userName)
+      case _ =>
     }
   }
 
@@ -79,20 +81,12 @@ class TSetIpAddressProcessor[I <: Iface](val iface: Iface)
     }
   }
 
-  private def getUnderlyingSocketFromTransport(transport: TTransport): TSocket = {
-    var tp = transport
-    while (tp != null) {
-      if (transport.isInstanceOf[TSaslServerTransport]) {
-        tp = transport.asInstanceOf[TSaslServerTransport].getUnderlyingTransport
-      }
-      if (transport.isInstanceOf[TSaslClientTransport]) {
-        tp = transport.asInstanceOf[TSaslClientTransport].getUnderlyingTransport
-      }
-      if (transport.isInstanceOf[TSocket]) {
-        return tp.asInstanceOf[TSocket]
-      }
-    }
-    null
+  private def getUnderlyingSocketFromTransport(transport: TTransport): TSocket = transport match {
+    case t: TSaslServerTransport => getUnderlyingSocketFromTransport(t.getUnderlyingTransport)
+    case t: TSaslClientTransport => getUnderlyingSocketFromTransport(t.getUnderlyingTransport)
+    case t: TSocket => t
+    case _ => null
   }
+
 }
 

@@ -57,8 +57,7 @@ class ThriftBinaryCLIService(cliService: CLIService)
       }
       if (!hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_USE_SSL)) {
         serverSocket = HiveAuthFactory.getServerSocket(hiveHost, portNum)
-      }
-      else {
+      } else {
         val keyStorePath: String = hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH).trim
         if (keyStorePath.isEmpty) {
           throw new IllegalArgumentException(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname + " Not configured for SSL connection")

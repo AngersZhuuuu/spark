@@ -240,7 +240,7 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
     }
     ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
     if (sessionConf != null && sessionConf.contains("use:database")) {
-      ctx.sql(s"use ${sessionConf.get("use:database")}")
+      ctx.sql(s"use ${sessionConf.get("use:database").get}")
     }
     operationManager.sessionToContexts.put(sessionHandle, ctx)
     sessionHandle

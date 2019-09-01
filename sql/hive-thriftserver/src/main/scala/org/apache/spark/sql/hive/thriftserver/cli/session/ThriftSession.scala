@@ -22,7 +22,7 @@ import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 
-abstract class ThriftSession extends ThriftSessionBase {
+trait ThriftSession extends ThriftSessionBase {
 
   @throws[SparkThriftServerSQLException]
   def open(sessionConfMap: Map[String, String]): Unit

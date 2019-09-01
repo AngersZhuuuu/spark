@@ -241,7 +241,7 @@ object HiveAuthFactory extends Logging {
         getKeytab = null
     }
   } catch {
-    case e: Throwable => e.printStackTrace()
+    case e: Throwable =>
   }
 
   @throws[SparkThriftServerSQLException]

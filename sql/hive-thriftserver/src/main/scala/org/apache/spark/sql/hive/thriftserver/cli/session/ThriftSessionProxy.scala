@@ -75,9 +75,9 @@ class ThriftSessionProxy extends InvocationHandler with Logging {
 }
 
 object ThriftSessionProxy {
-  def getProxy(kyuubiSession: ThriftSession, ugi: UserGroupInformation): ThriftSession = {
+  def getProxy(session: ThriftSession, ugi: UserGroupInformation): ThriftSession = {
     java.lang.reflect.Proxy.newProxyInstance(classOf[ThriftSession].getClassLoader,
       Array[Class[_]](classOf[ThriftSession]),
-      new ThriftSessionProxy(kyuubiSession, ugi)).asInstanceOf[ThriftSession]
+      new ThriftSessionProxy(session, ugi)).asInstanceOf[ThriftSession]
   }
 }
