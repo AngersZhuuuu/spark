@@ -1,11 +1,16 @@
 package org.apache.spark.sql.hive.thriftserver.server
 
+import java.util
+import java.util.Arrays
+
 import org.apache.commons.cli._
 import org.apache.commons.logging.LogFactory
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.common.LogUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.hive.common.util.HiveStringUtils
+import org.apache.hadoop.util.JvmPauseMonitor
+import org.apache.hive.common.util.{HiveStringUtils, HiveVersionInfo}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver.cli.CLIService
@@ -66,8 +71,6 @@ class SparkThriftServer(sqlContext: SQLContext)
 }
 
 object SparkThriftServer extends Logging {
-  private val LOG = LogFactory.getLog(classOf[SparkThriftServer])
-
   @throws[Throwable]
   private def startHiveServer2(): Unit = {
     var attempts = 0
@@ -81,7 +84,7 @@ object SparkThriftServer extends Logging {
         server = new SparkThriftServer(SparkSQLEnv.sqlContext)
         server.init(hiveConf)
         server.start()
-        ShimLoader.getHadoopShims.startPauseMonitor(hiveConf)
+        //ToDo add a JVMPauseMonitor for spark
       } catch {
         case throwable: Throwable =>
           if (server != null) {
@@ -129,8 +132,24 @@ object SparkThriftServer extends Logging {
       // NOTE: It is critical to do this here so that log4j is reinitialized
       // before any of the other core hive classes are loaded
       val initLog4jMessage = LogUtils.initHiveLog4j
+      val classname = classOf[SparkThriftServer].getSimpleName
       logDebug(initLog4jMessage)
-      HiveStringUtils.startupShutdownMessage(classOf[SparkThriftServer], args, LOG)
+      logInfo(toStartupShutdownString("STARTUP_MSG: ",
+        Array[String]("Starting " + classname,
+          "  host = " + HiveStringUtils.getHostname,
+          "  args = " + util.Arrays.asList(args),
+          "  version = " + HiveVersionInfo.getVersion,
+          "  classpath = " + System.getProperty("java.class.path"),
+          "  build = " + HiveVersionInfo.getUrl +
+            " -r " + HiveVersionInfo.getRevision +
+            "; compiled by '" + HiveVersionInfo.getUser +
+            "' on " + HiveVersionInfo.getDate)))
+      ShutdownHookManager.addShutdownHook(0)(() => {
+        logInfo(toStartupShutdownString(
+          "SHUTDOWN_MSG: ",
+          Array[String]("Shutting down " + classname +
+            " at " + HiveStringUtils.getHostname)))
+      })
       // Log debug message from "oproc" after log4j initialize properly
       logDebug(oproc.getDebugMessage.toString)
       // Call the executor which will execute the appropriate command based on the parsed options
@@ -140,6 +159,22 @@ object SparkThriftServer extends Logging {
         logError("Error initializing log: " + e.getMessage, e)
         System.exit(-1)
     }
+  }
+
+
+  private def toStartupShutdownString(prefix: String, msg: Array[String]) = {
+    val b = new StringBuilder(prefix)
+    b.append("\n/************************************************************")
+    val arr = msg
+    val len = msg.length
+    var i = 0
+    while (i < len) {
+      val s = arr(i)
+      b.append("\n" + prefix + s)
+      i += 1
+    }
+    b.append("\n************************************************************/")
+    b.toString
   }
 
   /**

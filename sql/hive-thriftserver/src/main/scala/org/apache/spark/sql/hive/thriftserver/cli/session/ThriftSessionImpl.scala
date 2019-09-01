@@ -24,9 +24,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.conf.SystemVariables._
-import org.apache.hadoop.hive.ql.exec.{FetchFormatter, ListSinkOperator}
 import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hive.service.cli.thrift.TProtocolVersion
@@ -69,11 +67,6 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
       case e: IOException =>
         logWarning("Error setting scheduler queue: " + e, e)
     }
-    // Set an explicit session name to control the download directory name
-    _hiveConf.set(ConfVars.HIVESESSIONID.varname, _sessionHandle.getHandleIdentifier.toString)
-    // Use thrift transportable formatter
-    _hiveConf.set(ListSinkOperator.OUTPUT_FORMATTER, classOf[FetchFormatter.ThriftFormatter].getName)
-    _hiveConf.setInt(ListSinkOperator.OUTPUT_PROTOCOL, _protocol.getValue)
   } catch {
     case e: Throwable => e.printStackTrace()
   }
@@ -84,14 +77,6 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     _sessionState.setUserIpAddress(_ipAddress)
     _sessionState.setIsHiveServerQuery(true)
     SessionState.start(_sessionState)
-    try {
-      _sessionState.reloadAuxJars
-    } catch {
-      case e: IOException =>
-        val msg = "Failed to load reloadable jar file path: " + e
-        logError(msg, e)
-        throw new SparkThriftServerSQLException(msg, e)
-    }
     if (sessionConfMap != null)
       configureSession(sessionConfMap)
     _lastAccessTime = System.currentTimeMillis
@@ -104,11 +89,13 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
 
     for (entry <- sessionConfMap.entrySet) {
       val key = entry.getKey
-      if (key.startsWith("set:")) try
-        setVariable(key.substring(4), entry.getValue)
-      catch {
-        case e: Exception =>
-          throw new SparkThriftServerSQLException(e)
+      if (key.startsWith("set:")) {
+        try
+          setVariable(key.substring(4), entry.getValue)
+        catch {
+          case e: Exception =>
+            throw new SparkThriftServerSQLException(e)
+        }
       } else if (key.startsWith("use:")) {
         SessionState.get.setCurrentDatabase(entry.getValue)
       } else {
@@ -116,9 +103,6 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
       }
     }
   }
-
-  import org.apache.hadoop.hive.conf.HiveConf
-  import org.apache.hadoop.hive.ql.session.SessionState
 
   // Copy from org.apache.hadoop.hive.ql.processors.SetProcessor, only change:
   // setConf(varname, propName, varvalue, true) when varname.startsWith(HIVECONF_PREFIX)
@@ -135,17 +119,17 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
       return 1
     } else if (varname.startsWith(SYSTEM_PREFIX)) {
       val propName = varname.substring(SYSTEM_PREFIX.length)
-      System.getProperties.setProperty(propName, new VariableSubstitution().substitute(ss.getConf, value))
+      System.getProperties.setProperty(propName, value)
     } else if (varname.startsWith(HIVECONF_PREFIX)) {
       val propName = varname.substring(HIVECONF_PREFIX.length)
       setConf(varname, propName, value, true)
     } else if (varname.startsWith(HIVEVAR_PREFIX)) {
       val propName = varname.substring(HIVEVAR_PREFIX.length)
-      ss.getHiveVariables.put(propName, new VariableSubstitution().substitute(ss.getConf, value))
+      ss.getHiveVariables.put(propName,  value)
     } else if (varname.startsWith(METACONF_PREFIX)) {
       val propName = varname.substring(METACONF_PREFIX.length)
       val hive = Hive.get(ss.getConf)
-      hive.setMetaConf(propName, new VariableSubstitution().substitute(ss.getConf, value))
+      hive.setMetaConf(propName, value)
     } else {
       setConf(varname, varname, value, true)
     }
@@ -156,7 +140,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
   @throws[IllegalArgumentException]
   private def setConf(varname: String, key: String, varvalue: String, register: Boolean): Unit = {
     val conf = SessionState.get.getConf
-    val value = new VariableSubstitution().substitute(conf, varvalue)
+    val value = varvalue
     if (conf.getBoolVar(HiveConf.ConfVars.HIVECONFVALIDATION)) {
       val confVars = HiveConf.getConfVars(key)
       if (confVars != null) {
