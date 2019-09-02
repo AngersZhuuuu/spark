@@ -1,8 +1,8 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.service.Service
 import org.apache.spark.internal.Logging
+import org.apache.spark.service.Service
 
 object ServiceOperations extends Logging {
 

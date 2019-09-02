@@ -4,9 +4,9 @@ import java.util
 import java.util.Collections
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.service.Service.STATE
-import org.apache.hive.service.{Service, ServiceException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.service.Service.STATE
+import org.apache.spark.service.{Service, ServiceException}
 
 import scala.collection.JavaConverters._
 

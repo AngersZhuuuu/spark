@@ -22,8 +22,8 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
-import org.apache.hive.service.cli.thrift.CLIServiceUtils
 import org.apache.spark.internal.Logging
+import org.apache.spark.service.cli.thrift.CLIServiceUtils
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2

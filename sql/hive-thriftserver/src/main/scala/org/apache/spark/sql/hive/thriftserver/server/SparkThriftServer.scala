@@ -1,15 +1,10 @@
 package org.apache.spark.sql.hive.thriftserver.server
 
 import java.util
-import java.util.Arrays
 
 import org.apache.commons.cli._
-import org.apache.commons.logging.LogFactory
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.common.LogUtils
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.hadoop.util.JvmPauseMonitor
 import org.apache.hive.common.util.{HiveStringUtils, HiveVersionInfo}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext

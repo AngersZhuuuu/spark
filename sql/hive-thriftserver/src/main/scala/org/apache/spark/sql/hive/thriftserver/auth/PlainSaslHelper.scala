@@ -24,9 +24,9 @@ import java.util
 import javax.security.auth.callback._
 import javax.security.auth.login.LoginException
 import javax.security.sasl.{AuthenticationException, AuthorizeCallback, SaslException}
-import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods
-import org.apache.hive.service.auth.{AuthenticationProviderFactory, PlainSaslServer}
-import org.apache.hive.service.cli.thrift.TCLIService.Iface
+import org.apache.spark.service.auth.AuthenticationProviderFactory.AuthMethods
+import org.apache.spark.service.auth.{AuthenticationProviderFactory, PlainSaslServer}
+import org.apache.spark.service.cli.thrift.TCLIService.Iface
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.ThriftCLIService
 import org.apache.thrift.transport.{TSaslClientTransport, TSaslServerTransport, TTransport, TTransportFactory}
 import org.apache.thrift.{TProcessor, TProcessorFactory}

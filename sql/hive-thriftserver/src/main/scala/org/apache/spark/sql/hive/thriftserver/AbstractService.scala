@@ -3,9 +3,9 @@ package org.apache.spark.sql.hive.thriftserver
 import java.util
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hive.service.Service.STATE
-import org.apache.hive.service.{Service, ServiceStateChangeListener}
 import org.apache.spark.internal.Logging
+import org.apache.spark.service.Service.STATE
+import org.apache.spark.service.{Service, ServiceStateChangeListener}
 
 /**
  * Construct the service.

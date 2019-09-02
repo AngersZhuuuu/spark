@@ -18,9 +18,8 @@
 package org.apache.spark.sql.hive.thriftserver.cli
 
 
-import org.apache.hive.service.cli.thrift._
+import org.apache.spark.service.cli.thrift._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.hive.thriftserver.cli.RowSet
 import org.apache.spark.sql.hive.thriftserver.utils.SparkSQLUtils
 import org.apache.spark.sql.types._
 

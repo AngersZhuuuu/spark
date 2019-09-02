@@ -23,8 +23,8 @@ import java.util
 import javax.security.sasl.SaslException
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge
-import org.apache.hive.service.auth.TSubjectAssumingTransport
-import org.apache.hive.service.cli.thrift.TCLIService
+import org.apache.spark.service.auth.TSubjectAssumingTransport
+import org.apache.spark.service.cli.thrift.TCLIService
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.ThriftCLIService
 import org.apache.thrift.{TProcessor, TProcessorFactory}
 import org.apache.thrift.transport.{TSaslClientTransport, TTransport}

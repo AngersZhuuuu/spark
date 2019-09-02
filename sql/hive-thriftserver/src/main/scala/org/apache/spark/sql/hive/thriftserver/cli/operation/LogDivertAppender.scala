@@ -24,10 +24,10 @@ import com.google.common.base.Joiner
 import org.apache.hadoop.hive.ql.log.PerfLogger
 import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.hadoop.hive.ql.session.OperationLog.LoggingLevel
-import org.apache.hive.service.cli.thrift.CLIServiceUtils
 import org.apache.log4j.spi.{Filter, LoggingEvent}
 import org.apache.log4j.{PatternLayout, _}
 import org.apache.spark.internal.Logging
+import org.apache.spark.service.cli.thrift.CLIServiceUtils
 
 import scala.collection.JavaConverters._
 

@@ -27,8 +27,8 @@ import org.apache.hadoop.hive.conf.SystemVariables._
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.spark.internal.Logging
+import org.apache.spark.service.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.{Operation, OperationManager}

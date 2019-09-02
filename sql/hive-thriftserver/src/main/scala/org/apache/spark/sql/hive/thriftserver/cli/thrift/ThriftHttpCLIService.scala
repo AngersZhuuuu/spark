@@ -24,7 +24,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.Shell
-import org.apache.hive.service.cli.thrift.TCLIService
+import org.apache.spark.service.cli.thrift.TCLIService
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.CLIService
 import org.apache.spark.sql.hive.thriftserver.server.ThreadFactoryWithGarbageCleanup

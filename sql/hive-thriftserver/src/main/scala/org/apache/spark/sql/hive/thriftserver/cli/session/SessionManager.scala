@@ -24,8 +24,8 @@ import java.util.concurrent._
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.spark.internal.Logging
+import org.apache.spark.service.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.cli.SessionHandle
