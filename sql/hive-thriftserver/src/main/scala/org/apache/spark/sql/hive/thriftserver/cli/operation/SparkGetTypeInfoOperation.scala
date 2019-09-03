@@ -20,14 +20,15 @@ package org.apache.spark.sql.hive.thriftserver.cli.operation
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.Type
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -38,7 +39,8 @@ import org.apache.spark.util.{Utils => SparkUtils}
  */
 private[hive] class SparkGetTypeInfoOperation(sqlContext: SQLContext,
                                               parentSession: ThriftSession)
-  extends SparkMetadataOperation(parentSession, GET_TYPE_INFO) with SparkMetadataOperationUtils with Logging {
+  extends SparkMetadataOperation(parentSession, GET_TYPE_INFO)
+  with SparkMetadataOperationUtils with Logging {
 
   private var statementId: String = _
   RESULT_SET_SCHEMA = new StructType()
@@ -108,7 +110,7 @@ private[hive] class SparkGetTypeInfoOperation(sqlContext: SQLContext,
           typeValue.getMaximumScale, // MAXIMUM_SCALE
           null, // SQL_DATA_TYPE, unused
           null, // SQL_DATETIME_SUB, unused
-          typeValue.getNumPrecRadix //NUM_PREC_RADIX
+          typeValue.getNumPrecRadix // NUM_PREC_RADIX
         )
         rowSet.addRow(rowData)
       })
@@ -131,8 +133,9 @@ private[hive] class SparkGetTypeInfoOperation(sqlContext: SQLContext,
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
     assertState(FINISHED)
     validateDefaultFetchOrientation(orientation)
-    if (orientation == FetchOrientation.FETCH_FIRST)
+    if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)
+    }
     rowSet.extractSubset(maxRows.toInt)
   }
 }

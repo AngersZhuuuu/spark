@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli.operation
 
+import java.util.{List => JList, UUID}
 import java.util.regex.Pattern
-import java.util.{UUID, List => JList}
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.CLIServiceUtils
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
@@ -31,10 +35,7 @@ import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.{Utils => SparkUtils}
-
-import scala.collection.JavaConverters._
 
 /**
  * Spark's own GetTablesOperation
@@ -66,7 +67,8 @@ private[hive] class SparkGetTablesOperation(sqlContext: SQLContext,
   private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
 
   private val tableTypeMapping: TableTypeMapping = {
-    val tableMappingStr = parentSession.getHiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
+    val tableMappingStr = parentSession.getHiveConf
+      .getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
     TableTypeMappingFactory.getTableTypeMapping(tableMappingStr)
   }
 
@@ -169,8 +171,9 @@ private[hive] class SparkGetTablesOperation(sqlContext: SQLContext,
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
     assertState(FINISHED)
     validateDefaultFetchOrientation(orientation)
-    if (orientation == FetchOrientation.FETCH_FIRST)
+    if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)
+    }
     rowSet.extractSubset(maxRows.toInt)
   }
 }

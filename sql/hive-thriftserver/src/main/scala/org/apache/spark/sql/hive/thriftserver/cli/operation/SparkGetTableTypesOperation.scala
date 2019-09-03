@@ -21,14 +21,15 @@ import java.util.UUID
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -39,14 +40,16 @@ import org.apache.spark.util.{Utils => SparkUtils}
  */
 private[hive] class SparkGetTableTypesOperation(sqlContext: SQLContext,
                                                 parentSession: ThriftSession)
-  extends SparkMetadataOperation(parentSession, GET_TABLE_TYPES) with SparkMetadataOperationUtils with Logging {
+  extends SparkMetadataOperation(parentSession, GET_TABLE_TYPES)
+  with SparkMetadataOperationUtils with Logging {
 
   private var statementId: String = _
   RESULT_SET_SCHEMA = new StructType()
     .add(StructField("TABLE_TYPE", StringType))
 
   private var tableTypeMapping: TableTypeMapping = {
-    val tableMappingStr = parentSession.getHiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
+    val tableMappingStr =
+      parentSession.getHiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING)
     TableTypeMappingFactory.getTableTypeMapping(tableMappingStr)
   }
 
@@ -101,8 +104,9 @@ private[hive] class SparkGetTableTypesOperation(sqlContext: SQLContext,
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
     assertState(FINISHED)
     validateDefaultFetchOrientation(orientation)
-    if (orientation == FetchOrientation.FETCH_FIRST)
+    if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)
+    }
     rowSet.extractSubset(maxRows.toInt)
   }
 }

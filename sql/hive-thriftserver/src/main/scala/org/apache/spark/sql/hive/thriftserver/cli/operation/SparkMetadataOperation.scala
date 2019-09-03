@@ -22,9 +22,10 @@ import java.util
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.security.authorization.plugin._
 import org.apache.hadoop.hive.ql.session.SessionState
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.cli.{CLOSED, OperationType}
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 
@@ -85,21 +86,29 @@ abstract class SparkMetadataOperation(session: ThriftSession, opType: OperationT
     var wStr: String = null
     if (datanucleusFormat) wStr = "*"
     else wStr = ".*"
-    pattern.replaceAll("([^\\\\])%", "$1" + wStr).replaceAll("\\\\%", "%").replaceAll("^%", wStr).replaceAll("([^\\\\])_", "$1.").replaceAll("\\\\_", "_").replaceAll("^_", ".")
+    pattern.replaceAll("([^\\\\])%", "$1" + wStr)
+      .replaceAll("\\\\%", "%").replaceAll("^%", wStr)
+      .replaceAll("([^\\\\])_", "$1.")
+      .replaceAll("\\\\_", "_")
+      .replaceAll("^_", ".")
   }
 
   protected def isAuthV2Enabled: Boolean = {
     val ss: SessionState = SessionState.get
-    ss.isAuthorizationModeV2 && HiveConf.getBoolVar(ss.getConf, HiveConf.ConfVars.HIVE_AUTHORIZATION_ENABLED)
+    ss.isAuthorizationModeV2 && HiveConf.getBoolVar(ss.getConf,
+      HiveConf.ConfVars.HIVE_AUTHORIZATION_ENABLED)
   }
 
   @throws[SparkThriftServerSQLException]
-  protected def authorizeMetaGets(opType: HiveOperationType, inpObjs: util.List[HivePrivilegeObject]): Unit = {
+  protected def authorizeMetaGets(opType: HiveOperationType,
+                                  inpObjs: util.List[HivePrivilegeObject]): Unit = {
     authorizeMetaGets(opType, inpObjs, null)
   }
 
   @throws[SparkThriftServerSQLException]
-  protected def authorizeMetaGets(opType: HiveOperationType, inpObjs: util.List[HivePrivilegeObject], cmdString: String): Unit = {
+  protected def authorizeMetaGets(opType: HiveOperationType,
+                                  inpObjs: util.List[HivePrivilegeObject],
+                                  cmdString: String): Unit = {
     val ss: SessionState = SessionState.get
     val ctxBuilder: HiveAuthzContext.Builder = new HiveAuthzContext.Builder
     ctxBuilder.setUserIpAddress(ss.getUserIpAddress)

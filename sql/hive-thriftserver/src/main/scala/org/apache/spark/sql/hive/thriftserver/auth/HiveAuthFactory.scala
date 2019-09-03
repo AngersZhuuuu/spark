@@ -22,27 +22,30 @@ import java.lang.reflect.{Field, Method}
 import java.net.{InetSocketAddress, UnknownHostException}
 import java.util
 import java.util.{Locale, Objects}
-
 import javax.net.ssl.SSLServerSocket
 import javax.security.auth.login.LoginException
 import javax.security.sasl.Sasl
+
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.HiveMetaStore
 import org.apache.hadoop.hive.metastore.HiveMetaStore.HMSHandler
 import org.apache.hadoop.hive.metastore.api.MetaException
 import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge.Server.ServerMode
 import org.apache.hadoop.hive.thrift.{DBTokenStore, HadoopThriftAuthBridge}
-import org.apache.hadoop.security.authorize.ProxyUsers
+import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge.Server.ServerMode
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
+import org.apache.hadoop.security.authorize.ProxyUsers
+import org.apache.thrift.TProcessorFactory
+import org.apache.thrift.transport._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.auth.SaslQOP
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.ThriftCLIService
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
-import org.apache.thrift.TProcessorFactory
-import org.apache.thrift.transport._
 
 
 class HiveAuthFactory extends Logging {
@@ -73,7 +76,8 @@ class HiveAuthFactory extends Logging {
         if (authTypeStr.equalsIgnoreCase(KERBEROS.getAuthName)) {
           val principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
           val keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
-          if (needUgiLogin(UserGroupInformation.getCurrentUser, SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
+          if (needUgiLogin(UserGroupInformation.getCurrentUser,
+            SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
             saslServer = ShimLoader.getHadoopThriftAuthBridge.createServer(principal, keytab)
           } else { // Using the default constructor to avoid unnecessary UGI login.
             saslServer = new HadoopThriftAuthBridge.Server
@@ -83,12 +87,15 @@ class HiveAuthFactory extends Logging {
           // start delegation token manager
           try { // rawStore is only necessary for DBTokenStore
             var rawStore: Any = null
-            val tokenStoreClass = conf.getVar(HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS)
+            val tokenStoreClass =
+              conf.getVar(HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS)
             if (tokenStoreClass == classOf[DBTokenStore].getName) {
-              val baseHandler: HMSHandler = new HiveMetaStore.HMSHandler("new db based metaserver", conf, true)
+              val baseHandler: HMSHandler =
+                new HiveMetaStore.HMSHandler("new db based metaserver", conf, true)
               rawStore = baseHandler.getMS
             }
-            delegationTokenManager.startDelegationTokenSecretManager(conf, rawStore, ServerMode.HIVESERVER2)
+            delegationTokenManager
+              .startDelegationTokenSecretManager(conf, rawStore, ServerMode.HIVESERVER2)
             ReflectionUtils.setSuperField(saslServer, "secretManager", delegationTokenManager)
           } catch {
             case e@(_: MetaException | _: IOException) =>
@@ -174,7 +181,8 @@ class HiveAuthFactory extends Logging {
   @throws[SparkThriftServerSQLException]
   def getDelegationToken(owner: String, renewer: String, remoteAddr: String): String = {
     if (delegationTokenManager == null) {
-      throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
+      throw new SparkThriftServerSQLException("Delegation token only supported " +
+        "over kerberos authentication", "08S01")
     }
     try {
       val tokenStr =
@@ -184,48 +192,63 @@ class HiveAuthFactory extends Logging {
           HS2_CLIENT_TOKEN,
           remoteAddr)
       if (tokenStr == null || tokenStr.isEmpty) {
-        throw new SparkThriftServerSQLException("Received empty retrieving delegation token for user " + owner, "08S01")
+        throw new SparkThriftServerSQLException("Received empty retrieving " +
+          "delegation token for user " + owner, "08S01")
       }
       tokenStr
     } catch {
       case e: IOException =>
-        throw new SparkThriftServerSQLException("Error retrieving delegation token for user " + owner, "08S01", e)
+        throw new SparkThriftServerSQLException("Error retrieving " +
+          "delegation token for user " + owner, "08S01", e)
       case e: InterruptedException =>
-        throw new SparkThriftServerSQLException("delegation token retrieval interrupted", "08S01", e)
+        throw new SparkThriftServerSQLException("delegation token retrieval interrupted",
+          "08S01", e)
     }
   }
 
   // cancel given delegation token
   @throws[SparkThriftServerSQLException]
   def cancelDelegationToken(delegationToken: String): Unit = {
-    if (delegationTokenManager == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
+    if (delegationTokenManager == null) {
+      throw new SparkThriftServerSQLException("Delegation token only supported " +
+        "over kerberos authentication", "08S01")
+    }
     try {
       delegationTokenManager.cancelDelegationToken(delegationToken)
     } catch {
       case e: IOException =>
-        throw new SparkThriftServerSQLException("Error canceling delegation token " + delegationToken, "08S01", e)
+        throw new SparkThriftServerSQLException("Error canceling delegation token " +
+          delegationToken, "08S01", e)
     }
   }
 
   @throws[SparkThriftServerSQLException]
   def renewDelegationToken(delegationToken: String): Unit = {
-    if (delegationTokenManager == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
+    if (delegationTokenManager == null) {
+      throw new SparkThriftServerSQLException("Delegation token only supported " +
+        "over kerberos authentication", "08S01")
+    }
     try {
       delegationTokenManager.renewDelegationToken(delegationToken)
     } catch {
       case e: IOException =>
-        throw new SparkThriftServerSQLException("Error renewing delegation token " + delegationToken, "08S01", e)
+        throw new SparkThriftServerSQLException("Error renewing delegation token " +
+          delegationToken, "08S01", e)
     }
   }
 
   @throws[SparkThriftServerSQLException]
   def getUserFromToken(delegationToken: String): String = {
-    if (delegationTokenManager == null) throw new SparkThriftServerSQLException("Delegation token only supported over kerberos authentication", "08S01")
+    if (delegationTokenManager == null) {
+      throw new SparkThriftServerSQLException("Delegation token only supported over" +
+        " kerberos authentication", "08S01")
+    }
     try {
       delegationTokenManager.getUserFromToken(delegationToken)
     } catch {
       case e: IOException =>
-        throw new SparkThriftServerSQLException("Error extracting user from delegation token " + delegationToken, "08S01", e)
+        throw new SparkThriftServerSQLException("Error extracting user from delegation token " +
+          delegationToken, "08S01", e)
     }
   }
 
@@ -266,22 +289,29 @@ object HiveAuthFactory extends Logging {
   }
 
   @throws[SparkThriftServerSQLException]
-  def verifyProxyAccess(realUser: String, proxyUser: String, ipAddress: String, hiveConf: HiveConf): Unit = {
+  def verifyProxyAccess(realUser: String,
+                        proxyUser: String,
+                        ipAddress: String,
+                        hiveConf: HiveConf): Unit = {
     try {
       var sessionUgi: UserGroupInformation = null
       if (UserGroupInformation.isSecurityEnabled) {
         val kerbName = ShimLoader.getHadoopShims.getKerberosNameShim(realUser)
-        sessionUgi = UserGroupInformation.createProxyUser(kerbName.getServiceName, UserGroupInformation.getLoginUser)
+        sessionUgi =
+          UserGroupInformation.createProxyUser(kerbName.getServiceName,
+            UserGroupInformation.getLoginUser)
       } else {
         sessionUgi = UserGroupInformation.createRemoteUser(realUser)
       }
       if (!proxyUser.equalsIgnoreCase(realUser)) {
         ProxyUsers.refreshSuperUserGroupsConfiguration(hiveConf)
-        ProxyUsers.authorize(UserGroupInformation.createProxyUser(proxyUser, sessionUgi), ipAddress, hiveConf)
+        ProxyUsers.authorize(UserGroupInformation.createProxyUser(proxyUser, sessionUgi),
+          ipAddress, hiveConf)
       }
     } catch {
       case e: IOException =>
-        throw new SparkThriftServerSQLException("Failed to validate proxy privilege of " + realUser + " for " + proxyUser, "08S01", e)
+        throw new SparkThriftServerSQLException("Failed to validate proxy privilege of " +
+          realUser + " for " + proxyUser, "08S01", e)
     }
   }
 
@@ -320,7 +350,8 @@ object HiveAuthFactory extends Logging {
                          keyStorePath: String,
                          keyStorePassWord: String,
                          sslVersionBlacklist: util.List[String]): TServerSocket = {
-    val params: TSSLTransportFactory.TSSLTransportParameters = new TSSLTransportFactory.TSSLTransportParameters()
+    val params: TSSLTransportFactory.TSSLTransportParameters =
+      new TSSLTransportFactory.TSSLTransportParameters()
     params.setKeyStore(keyStorePath, keyStorePassWord)
     var serverAddress: InetSocketAddress = null
     if (hiveHost == null || hiveHost.isEmpty) {
@@ -328,11 +359,11 @@ object HiveAuthFactory extends Logging {
     } else {
       serverAddress = new InetSocketAddress(hiveHost, portNum)
     }
-    val thriftServerSocket = TSSLTransportFactory.getServerSocket(portNum, 0, serverAddress.getAddress, params)
+    val thriftServerSocket =
+      TSSLTransportFactory.getServerSocket(portNum, 0, serverAddress.getAddress, params)
     if (thriftServerSocket.getServerSocket.isInstanceOf[SSLServerSocket]) {
       val sslVersionBlacklistLocal = new util.ArrayList[String]
-      import scala.collection.JavaConversions._
-      for (sslVersion <- sslVersionBlacklist) {
+      for (sslVersion <- sslVersionBlacklist.asScala) {
         sslVersionBlacklistLocal.add(sslVersion.trim.toLowerCase(Locale.ROOT))
       }
       val sslServerSocket = thriftServerSocket.getServerSocket.asInstanceOf[SSLServerSocket]
@@ -345,7 +376,8 @@ object HiveAuthFactory extends Logging {
         }
       }
       sslServerSocket.setEnabledProtocols(enabledProtocols.toArray(new Array[String](0)))
-      logInfo("SSL Server Socket Enabled Protocols: " + sslServerSocket.getEnabledProtocols.mkString(","))
+      logInfo("SSL Server Socket Enabled Protocols: " +
+        sslServerSocket.getEnabledProtocols.mkString(","))
     }
     thriftServerSocket
   }
@@ -355,8 +387,12 @@ object HiveAuthFactory extends Logging {
   def loginFromKeytab(hiveConf: HiveConf): Unit = {
     val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
     val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
-    if (principal.isEmpty || keyTabFile.isEmpty) throw new IOException("HiveServer2 Kerberos principal or keytab is not correctly configured")
-    else UserGroupInformation.loginUserFromKeytab(SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
+    if (principal.isEmpty || keyTabFile.isEmpty) {
+      throw new IOException("HiveServer2 Kerberos principal or keytab is not correctly configured")
+    } else {
+      UserGroupInformation
+        .loginUserFromKeytab(SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
+    }
   }
 
   // Perform SPNEGO login using the hadoop shim API if the configuration is available
@@ -364,8 +400,12 @@ object HiveAuthFactory extends Logging {
   def loginFromSpnegoKeytabAndReturnUGI(hiveConf: HiveConf): UserGroupInformation = {
     val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL)
     val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB)
-    if (principal.isEmpty || keyTabFile.isEmpty) throw new IOException("HiveServer2 SPNEGO principal or keytab is not correctly configured")
-    else UserGroupInformation.loginUserFromKeytabAndReturnUGI(SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
+    if (principal.isEmpty || keyTabFile.isEmpty) {
+      throw new IOException("HiveServer2 SPNEGO principal or keytab is not correctly configured")
+    } else {
+      UserGroupInformation.loginUserFromKeytabAndReturnUGI(
+          SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
+    }
   }
 
   def needUgiLogin(ugi: UserGroupInformation, principal: String, keytab: String): Boolean = {

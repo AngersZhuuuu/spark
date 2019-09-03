@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver.cli.operation
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
@@ -90,8 +91,9 @@ private[hive] class SparkGetCatalogsOperation(
   override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
     assertState(FINISHED)
     validateDefaultFetchOrientation(orientation)
-    if (orientation == FetchOrientation.FETCH_FIRST)
+    if (orientation == FetchOrientation.FETCH_FIRST) {
       rowSet.setStartOffset(0)
+    }
     rowSet.extractSubset(maxRows.toInt)
   }
 }

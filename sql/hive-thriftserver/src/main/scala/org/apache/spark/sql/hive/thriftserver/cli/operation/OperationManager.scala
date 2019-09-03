@@ -21,10 +21,14 @@ import java.sql.SQLException
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.log4j.Logger
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.AbstractService
 import org.apache.spark.sql.hive.thriftserver.cli._
@@ -32,10 +36,7 @@ import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{Row, SQLContext}
 
-import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 
 private[hive] class OperationManager
   extends AbstractService(classOf[OperationManager].getSimpleName)
@@ -48,7 +49,8 @@ private[hive] class OperationManager
 
   override def init(hiveConf: HiveConf): Unit = synchronized {
     if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
-      initOperationLogCapture(hiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LEVEL))
+      initOperationLogCapture(
+        hiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LEVEL))
     } else {
       logDebug("Operation level logging is turned off")
     }
@@ -83,7 +85,7 @@ private[hive] class OperationManager
     setConfMap(conf, hiveSessionState.getOverriddenConfigurations)
     setConfMap(conf, hiveSessionState.getHiveVariables)
     val runInBackground = async && conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
-    val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,
+    val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay.asJava,
       runInBackground)(sqlContext, sessionToActivePool)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created Operation for $statement with session=$parentSession, " +
@@ -91,104 +93,97 @@ private[hive] class OperationManager
     operation
   }
 
-  def newGetTypeInfoOperation(parentSession: ThriftSession): SparkGetTypeInfoOperation = synchronized {
-    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+  def newGetTypeInfoOperation(session: ThriftSession): SparkGetTypeInfoOperation = synchronized {
+    val sqlContext = sessionToContexts.get(session.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${session.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetTypeInfoOperation(sqlContext, parentSession)
+    val operation = new SparkGetTypeInfoOperation(sqlContext, session)
     handleToOperation.put(operation.getHandle, operation)
-    logDebug(s"Created GetTypeInfoOperation with session=$parentSession.")
+    logDebug(s"Created GetTypeInfoOperation with session=$session.")
     operation
   }
 
-  def newGetCatalogsOperation(parentSession: ThriftSession): SparkGetCatalogsOperation = synchronized {
-    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+  def newGetCatalogsOperation(session: ThriftSession): SparkGetCatalogsOperation = synchronized {
+    val sqlContext = sessionToContexts.get(session.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${session.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetCatalogsOperation(sqlContext, parentSession)
+    val operation = new SparkGetCatalogsOperation(sqlContext, session)
     handleToOperation.put(operation.getHandle, operation)
-    logDebug(s"Created GetCatalogsOperation with session=$parentSession.")
+    logDebug(s"Created GetCatalogsOperation with session=$session.")
     operation
   }
 
-  def newGetSchemasOperation(parentSession: ThriftSession,
+  def newGetSchemasOperation(session: ThriftSession,
                              catalogName: String,
                              schemaName: String): SparkGetSchemasOperation = synchronized {
-    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+    val sqlContext = sessionToContexts.get(session.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${session.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetSchemasOperation(sqlContext, parentSession, catalogName, schemaName)
+    val operation = new SparkGetSchemasOperation(sqlContext, session, catalogName, schemaName)
     handleToOperation.put(operation.getHandle, operation)
-    logDebug(s"Created GetSchemasOperation with session=$parentSession.")
+    logDebug(s"Created GetSchemasOperation with session=$session.")
     operation
   }
 
-  def newGetTablesOperation(parentSession: ThriftSession,
+  def newGetTablesOperation(session: ThriftSession,
                             catalogName: String,
                             schemaName: String,
                             tableName: String,
                             tableTypes: List[String]): SparkMetadataOperation = synchronized {
-    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+    val sqlContext = sessionToContexts.get(session.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${session.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetTablesOperation(sqlContext, parentSession,
+    val operation = new SparkGetTablesOperation(sqlContext, session,
       catalogName, schemaName, tableName, tableTypes.asJava)
     handleToOperation.put(operation.getHandle, operation)
-    logDebug(s"Created GetTablesOperation with session=$parentSession.")
+    logDebug(s"Created GetTablesOperation with session=$session.")
     operation
   }
 
-  def newGetColumnsOperation(parentSession: ThriftSession,
+  def newGetColumnsOperation(session: ThriftSession,
                              catalogName: String,
                              schemaName: String,
                              tableName: String,
                              columnName: String): SparkGetColumnsOperation = synchronized {
-    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+    val sqlContext = sessionToContexts.get(session.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${session.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetColumnsOperation(sqlContext, parentSession,
+    val operation = new SparkGetColumnsOperation(sqlContext, session,
       catalogName, schemaName, tableName, columnName)
     handleToOperation.put(operation.getHandle, operation)
-    logDebug(s"Created GetColumnsOperation with session=$parentSession.")
+    logDebug(s"Created GetColumnsOperation with session=$session.")
     operation
   }
 
-  def newGetTableTypesOperation(parentSession: ThriftSession): SparkGetTableTypesOperation = synchronized {
-    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
-      " initialized or had already closed.")
-    val operation = new SparkGetTableTypesOperation(sqlContext, parentSession)
-    handleToOperation.put(operation.getHandle, operation)
-    logDebug(s"Created GetTableTypesOperation with session=$parentSession.")
-    operation
-  }
+  def newGetTableTypesOperation(session: ThriftSession): SparkGetTableTypesOperation =
+    synchronized {
+      val sqlContext = sessionToContexts.get(session.getSessionHandle)
+      require(sqlContext != null, s"Session handle: ${session.getSessionHandle} has not been" +
+        " initialized or had already closed.")
+      val operation = new SparkGetTableTypesOperation(sqlContext, session)
+      handleToOperation.put(operation.getHandle, operation)
+      logDebug(s"Created GetTableTypesOperation with session=$session.")
+      operation
+    }
 
-  def newGetFunctionsOperation(parentSession: ThriftSession,
+  def newGetFunctionsOperation(session: ThriftSession,
                                catalogName: String,
                                schemaName: String,
                                functionName: String): SparkGetFunctionsOperation = synchronized {
-    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+    val sqlContext = sessionToContexts.get(session.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${session.getSessionHandle} has not been" +
       " initialized or had already closed.")
-    val operation = new SparkGetFunctionsOperation(sqlContext, parentSession,
+    val operation = new SparkGetFunctionsOperation(sqlContext, session,
       catalogName, schemaName, functionName)
     handleToOperation.put(operation.getHandle, operation)
-    logDebug(s"Created GetFunctionsOperation with session=$parentSession.")
+    logDebug(s"Created GetFunctionsOperation with session=$session.")
     operation
   }
 
-  def newGetPrimaryKeysOperation(parentSession: ThriftSession,
+  def newGetPrimaryKeysOperation(session: ThriftSession,
                                  catalogName: String,
                                  schemaName: String,
                                  tableName: String): Operation = {
-    //    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    //    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
-    //      " initialized or had already closed.")
-    //
-    //    val operation: Operation = new Nothing(sqlContext, parentSession, catalogName, schemaName, tableName)
-    //    handleToOperation.put(operation.getHandle, operation)
-    //    logDebug(s"Created GetPrimaryKeysOperation with session=$parentSession.")
-    //    operation
     throw new SparkThriftServerSQLException("GetFunctionsOperation is not supported yet")
   }
 
@@ -199,14 +194,6 @@ private[hive] class OperationManager
                                     foreignCatalog: String,
                                     foreignSchema: String,
                                     foreignTable: String): Operation = {
-    //    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    //    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
-    //      " initialized or had already closed.")
-    //
-    //    val operation: Operation = new Nothing(sqlContext, parentSession, primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema, foreignTable)
-    //    handleToOperation.put(operation.getHandle, operation)
-    //    logDebug(s"Created GetCrossReferenceOperation with session=$parentSession.")
-    //    operation
     throw new SparkThriftServerSQLException("GetPrimaryKeysOperation is not supported yet")
   }
 
@@ -302,7 +289,8 @@ private[hive] class OperationManager
     // get the OperationLog object from the operation
     val operationLog: OperationLog = getOperation(opHandle).getOperationLog
     if (operationLog == null) {
-      throw new SparkThriftServerSQLException("Couldn't find log associated with operation handle: " + opHandle)
+      throw new SparkThriftServerSQLException("Couldn't find log associated " +
+        "with operation handle: " + opHandle)
     }
     // read logs
     var logs: util.List[String] = null
@@ -318,7 +306,7 @@ private[hive] class OperationManager
   }
 
   private def isFetchFirst(fetchOrientation: FetchOrientation): Boolean = {
-    //TODO: Since OperationLog is moved to package o.a.h.h.ql.session,
+    // TODO: Since OperationLog is moved to package o.a.h.h.ql.session,
     // we may add a Enum there and map FetchOrientation to it.
     if (fetchOrientation.equals(FetchOrientation.FETCH_FIRST)) {
       return true
@@ -339,6 +327,6 @@ private[hive] class OperationManager
         removed.add(operation)
       }
     })
-    removed.toList
+    removed.asScala.toList
   }
 }

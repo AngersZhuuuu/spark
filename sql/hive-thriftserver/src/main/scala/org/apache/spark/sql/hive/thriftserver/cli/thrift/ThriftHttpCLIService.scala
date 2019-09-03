@@ -24,10 +24,6 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.Shell
-import org.apache.spark.service.cli.thrift.TCLIService
-import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
-import org.apache.spark.sql.hive.thriftserver.cli.CLIService
-import org.apache.spark.sql.hive.thriftserver.server.ThreadFactoryWithGarbageCleanup
 import org.apache.thrift.TProcessor
 import org.apache.thrift.protocol.{TBinaryProtocol, TProtocolFactory}
 import org.apache.thrift.server.TServlet
@@ -35,6 +31,12 @@ import org.eclipse.jetty.server.{AbstractConnectionFactory, ConnectionFactory, H
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.ssl.SslContextFactory
 import org.eclipse.jetty.util.thread.{ExecutorThreadPool, ScheduledExecutorScheduler}
+
+import org.apache.spark.service.cli.thrift.TCLIService
+import org.apache.spark.service.server.ThreadFactoryWithGarbageCleanup
+import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
+import org.apache.spark.sql.hive.thriftserver.cli.CLIService
+
 
 class ThriftHttpCLIService(cliService: CLIService)
   extends ThriftCLIService(cliService, classOf[ThriftHttpCLIService].getSimpleName) {
@@ -56,7 +58,7 @@ class ThriftHttpCLIService(cliService: CLIService)
           new ThreadFactoryWithGarbageCleanup(threadPoolName))
       val threadPool: ExecutorThreadPool = new ExecutorThreadPool(executorService)
       // HTTP Server
-      httpServer = new org.eclipse.jetty.server.Server(threadPool);
+      httpServer = new org.eclipse.jetty.server.Server(threadPool)
       // Connector configs
       var connectionFactories: Array[ConnectionFactory] = null
       val useSsl: Boolean = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_USE_SSL)
@@ -76,14 +78,16 @@ class ThriftHttpCLIService(cliService: CLIService)
             " Not configured for SSL connection")
         }
         val sslContextFactory: SslContextFactory = new SslContextFactory.Server
-        val excludedProtocols: Array[String] = hiveConf.getVar(ConfVars.HIVE_SSL_PROTOCOL_BLACKLIST).split(",")
+        val excludedProtocols: Array[String] =
+          hiveConf.getVar(ConfVars.HIVE_SSL_PROTOCOL_BLACKLIST).split(",")
         logInfo("HTTP Server SSL: adding excluded protocols: " + excludedProtocols.mkString(","))
         sslContextFactory.addExcludeProtocols(excludedProtocols: _*)
         logInfo("HTTP Server SSL: SslContextFactory.getExcludeProtocols = "
           + sslContextFactory.getExcludeProtocols.mkString(","))
         sslContextFactory.setKeyStorePath(keyStorePath)
         sslContextFactory.setKeyStorePassword(keyStorePassword)
-        connectionFactories = AbstractConnectionFactory.getFactories(sslContextFactory, new HttpConnectionFactory)
+        connectionFactories =
+          AbstractConnectionFactory.getFactories(sslContextFactory, new HttpConnectionFactory)
       } else {
         connectionFactories = Array[ConnectionFactory](new HttpConnectionFactory)
       }
@@ -99,7 +103,9 @@ class ThriftHttpCLIService(cliService: CLIService)
       connector.setPort(portNum)
       // Linux:yes, Windows:no
       connector.setReuseAddress(!Shell.WINDOWS)
-      val maxIdleTime: Int = hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_MAX_IDLE_TIME, TimeUnit.MILLISECONDS).toInt
+      val maxIdleTime: Int = hiveConf.getTimeVar(
+        ConfVars.HIVE_SERVER2_THRIFT_HTTP_MAX_IDLE_TIME,
+        TimeUnit.MILLISECONDS).toInt
       connector.setIdleTimeout(maxIdleTime)
       httpServer.addConnector(connector)
       // Thrift configs
@@ -112,22 +118,28 @@ class ThriftHttpCLIService(cliService: CLIService)
       // UGI for the http/_HOST (SPNego) principal
       val httpUGI: UserGroupInformation = cliService.getHttpUGI
       val authType: String = hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
-      val thriftHttpServlet: TServlet = new ThriftHttpServlet(processor, protocolFactory, authType, serviceUGI, httpUGI)
+      val thriftHttpServlet: TServlet =
+        new ThriftHttpServlet(processor, protocolFactory, authType, serviceUGI, httpUGI)
       // Context handler
       val context: ServletContextHandler = new ServletContextHandler(ServletContextHandler.SESSIONS)
       context.setContextPath("/")
-      val httpPath: String = getHttpPath(hiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH))
+      val httpPath: String =
+        getHttpPath(hiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH))
       httpServer.setHandler(context)
       context.addServlet(new ServletHolder(thriftHttpServlet), httpPath)
       // TODO: check defaults: maxTimeout, keepalive, maxBodySize, bodyRecieveDuration, etc.
       // Finally, start the server
       httpServer.start()
-      val msg: String = "Started " + classOf[ThriftHttpCLIService].getSimpleName + " in " + schemeName + " mode on port " + connector.getLocalPort + " path=" + httpPath + " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads"
+      val msg: String = "Started " + classOf[ThriftHttpCLIService].getSimpleName +
+        " in " + schemeName + " mode on port " + connector.getLocalPort +
+        " path=" + httpPath + " with " + minWorkerThreads + "..." +
+        maxWorkerThreads + " worker threads"
       logInfo(msg)
       httpServer.join()
     } catch {
       case t: Throwable =>
-        logError("Error starting HiveServer2: could not start " + classOf[ThriftHttpCLIService].getSimpleName, t)
+        logError("Error starting HiveServer2: could not start " +
+          classOf[ThriftHttpCLIService].getSimpleName, t)
         System.exit(-1)
     }
   }

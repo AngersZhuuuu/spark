@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.hive.thriftserver.auth
 
-import org.apache.spark.service.cli.thrift.TCLIService.Iface
-import org.apache.spark.internal.Logging
-import org.apache.spark.service.cli.thrift.TCLIService
 import org.apache.thrift.TException
 import org.apache.thrift.protocol.TProtocol
 import org.apache.thrift.transport.{TSaslClientTransport, TSaslServerTransport, TSocket, TTransport}
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.service.cli.thrift.TCLIService
+import org.apache.spark.service.cli.thrift.TCLIService.Iface
 
 /**
  * This class is responsible for setting the ipAddress for operations executed via HiveServer2.
@@ -77,7 +78,8 @@ class TSetIpAddressProcessor[I <: Iface](val iface: Iface)
     if (tSocket == null) {
       logWarning("Unknown Transport, cannot determine ipAddress")
     } else {
-      TSetIpAddressProcessor.THREAD_LOCAL_IP_ADDRESS.set(tSocket.getSocket.getInetAddress.getHostAddress)
+      TSetIpAddressProcessor.THREAD_LOCAL_IP_ADDRESS
+        .set(tSocket.getSocket.getInetAddress.getHostAddress)
     }
   }
 

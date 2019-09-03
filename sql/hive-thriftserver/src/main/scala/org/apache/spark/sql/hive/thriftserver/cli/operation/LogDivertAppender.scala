@@ -20,16 +20,18 @@ package org.apache.spark.sql.hive.thriftserver.cli.operation
 import java.io.CharArrayWriter
 import java.util.regex.Pattern
 
+import scala.collection.JavaConverters._
+
 import com.google.common.base.Joiner
 import org.apache.hadoop.hive.ql.log.PerfLogger
 import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.hadoop.hive.ql.session.OperationLog.LoggingLevel
-import org.apache.log4j.spi.{Filter, LoggingEvent}
 import org.apache.log4j.{PatternLayout, _}
+import org.apache.log4j.spi.{Filter, LoggingEvent}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.CLIServiceUtils
 
-import scala.collection.JavaConverters._
 
 class LogDivertAppender extends WriterAppender with Logging {
 
@@ -38,7 +40,8 @@ class LogDivertAppender extends WriterAppender with Logging {
   private var isVerbose: Boolean = _
   private var verboseLayout: Layout = _
 
-  private class NameFilter(var loggingMode: LoggingLevel, var operationManager: OperationManager) extends Filter {
+  private class NameFilter(var loggingMode: LoggingLevel,
+                           var operationManager: OperationManager) extends Filter {
 
     /* Patterns that are excluded in verbose logging level.
     * Filter out messages coming from log processing classes, or we'll run an infinite loop.
@@ -69,27 +72,30 @@ class LogDivertAppender extends WriterAppender with Logging {
     private var namePattern: Pattern = setCurrentNamePattern(loggingMode)
 
     def setCurrentNamePattern(loggingMode: LoggingLevel): Pattern = {
-      if (loggingMode eq OperationLog.LoggingLevel.VERBOSE)
+      if (loggingMode eq OperationLog.LoggingLevel.VERBOSE) {
         verboseExcludeNamePattern
-      else if (loggingMode eq OperationLog.LoggingLevel.EXECUTION)
+      } else if (loggingMode eq OperationLog.LoggingLevel.EXECUTION) {
         executionIncludeNamePattern
-      else if (loggingMode eq OperationLog.LoggingLevel.PERFORMANCE)
+      } else if (loggingMode eq OperationLog.LoggingLevel.PERFORMANCE) {
         performanceIncludeNamePattern
-      else
+      } else {
         null
+      }
     }
 
     override def decide(ev: LoggingEvent): Int = {
       val log = operationManager.getOperationLogByThread
       val excludeMatches: Boolean = loggingMode eq OperationLog.LoggingLevel.VERBOSE
 
-      if (log == null)
+      if (log == null) {
         return Filter.DENY
+      }
 
       val currentLoggingMode = log.getOpLoggingLevel
       // If logging is disabled, deny everything.
-      if (currentLoggingMode == OperationLog.LoggingLevel.NONE)
+      if (currentLoggingMode == OperationLog.LoggingLevel.NONE) {
         return Filter.DENY
+      }
 
       if (currentLoggingMode ne loggingMode) {
         loggingMode = currentLoggingMode
@@ -131,8 +137,9 @@ class LogDivertAppender extends WriterAppender with Logging {
     // There should be a ConsoleAppender. Copy its Layout.
     var layout: Layout = null
     Logger.getRootLogger.getAllAppenders.asScala.foreach { ap =>
-      if (ap.isInstanceOf[ConsoleAppender])
+      if (ap.isInstanceOf[ConsoleAppender]) {
         layout = ap.asInstanceOf[Appender].getLayout
+      }
     }
     this.layout =
       Option(layout).getOrElse(new PatternLayout("%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n"))

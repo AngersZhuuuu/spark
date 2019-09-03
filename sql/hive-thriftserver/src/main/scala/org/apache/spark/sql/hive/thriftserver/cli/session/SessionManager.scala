@@ -24,22 +24,25 @@ import java.util.concurrent._
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.TProtocolVersion
+import org.apache.spark.service.server.ThreadFactoryWithGarbageCleanup
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.{CompositeService, HiveThriftServer2}
 import org.apache.spark.sql.hive.thriftserver.cli.SessionHandle
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationManager
+import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
-import org.apache.spark.sql.hive.thriftserver.server.{SparkThriftServer, ThreadFactoryWithGarbageCleanup}
-import org.apache.spark.sql.hive.thriftserver.{CompositeService, HiveThriftServer2}
 
 class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   extends CompositeService(classOf[SessionManager].getSimpleName)
     with Logging {
 
   private var hiveConf: HiveConf = null
-  private val handleToSession: ConcurrentHashMap[SessionHandle, ThriftSession] = new ConcurrentHashMap[SessionHandle, ThriftSession]
+  private val handleToSession: ConcurrentHashMap[SessionHandle, ThriftSession] =
+    new ConcurrentHashMap[SessionHandle, ThriftSession]
   private val operationManager: OperationManager = new OperationManager()
   private var backgroundOperationPool: ThreadPoolExecutor = null
   private var isOperationLogEnabled: Boolean = false
@@ -54,7 +57,7 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
 
   override def init(hiveConf: HiveConf): Unit = {
     this.hiveConf = hiveConf
-    //Create operation log root directory, if operation logging is enabled
+    // Create operation log root directory, if operation logging is enabled
     if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
       initOperationLogRootDir
     }
@@ -68,8 +71,10 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
     logInfo("HiveServer2: Background operation thread pool size: " + poolSize)
     val poolQueueSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_WAIT_QUEUE_SIZE)
     logInfo("HiveServer2: Background operation thread wait queue size: " + poolQueueSize)
-    val keepAliveTime = HiveConf.getTimeVar(hiveConf, ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME, TimeUnit.SECONDS)
-    logInfo("HiveServer2: Background operation thread keepalive time: " + keepAliveTime + " seconds")
+    val keepAliveTime = HiveConf.getTimeVar(hiveConf,
+      ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME, TimeUnit.SECONDS)
+    logInfo("HiveServer2: Background operation thread keepalive time: " +
+      keepAliveTime + " seconds")
     // Create a thread pool with #poolSize threads
     // Threads terminate when they are idle for more than the keepAliveTime
     // A bounded blocking queue is used to queue incoming operations, if #operations > poolSize
@@ -81,20 +86,26 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
         new LinkedBlockingQueue[Runnable](poolQueueSize),
         new ThreadFactoryWithGarbageCleanup(threadPoolName))
     backgroundOperationPool.allowCoreThreadTimeOut(true)
-    checkInterval = HiveConf.getTimeVar(hiveConf, ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL, TimeUnit.MILLISECONDS)
-    sessionTimeout = HiveConf.getTimeVar(hiveConf, ConfVars.HIVE_SERVER2_IDLE_SESSION_TIMEOUT, TimeUnit.MILLISECONDS)
-    checkOperation = HiveConf.getBoolVar(hiveConf, ConfVars.HIVE_SERVER2_IDLE_SESSION_CHECK_OPERATION)
+    checkInterval = HiveConf.getTimeVar(hiveConf,
+      ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL, TimeUnit.MILLISECONDS)
+    sessionTimeout = HiveConf.getTimeVar(hiveConf,
+      ConfVars.HIVE_SERVER2_IDLE_SESSION_TIMEOUT, TimeUnit.MILLISECONDS)
+    checkOperation = HiveConf.getBoolVar(hiveConf,
+      ConfVars.HIVE_SERVER2_IDLE_SESSION_CHECK_OPERATION)
   }
 
   private def initOperationLogRootDir(): Unit = {
-    operationLogRootDir = new File(hiveConf.getVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION))
+    operationLogRootDir =
+      new File(hiveConf.getVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION))
     isOperationLogEnabled = true
     if (operationLogRootDir.exists && !operationLogRootDir.isDirectory) {
-      logWarning("The operation log root directory exists, but it is not a directory: " + operationLogRootDir.getAbsolutePath)
+      logWarning("The operation log root directory exists, " +
+        "but it is not a directory: " + operationLogRootDir.getAbsolutePath)
       isOperationLogEnabled = false
     }
     if (!operationLogRootDir.exists) if (!operationLogRootDir.mkdirs) {
-      logWarning("Unable to create operation log root directory: " + operationLogRootDir.getAbsolutePath)
+      logWarning("Unable to create operation log root directory: " +
+        operationLogRootDir.getAbsolutePath)
       isOperationLogEnabled = false
     }
     if (isOperationLogEnabled) {
@@ -103,7 +114,8 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
         FileUtils.forceDeleteOnExit(operationLogRootDir)
       catch {
         case e: IOException =>
-          logWarning("Failed to schedule cleanup HS2 operation logging root dir: " + operationLogRootDir.getAbsolutePath, e)
+          logWarning("Failed to schedule cleanup HS2 operation logging root dir: " +
+            operationLogRootDir.getAbsolutePath, e)
       }
     }
   }
@@ -130,7 +142,8 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
               session.getLastAccessTime + sessionTimeout <= current &&
               (!checkOperation || session.getNoOperationTime > sessionTimeout)) {
               val handle: SessionHandle = session.getSessionHandle
-              logWarning("Session " + handle + " is Timed-out (last access : " + new Date(session.getLastAccessTime) + ") and will be closed")
+              logWarning("Session " + handle + " is Timed-out (last access : " +
+                new Date(session.getLastAccessTime) + ") and will be closed")
               try
                 closeSession(handle)
               catch {
@@ -164,12 +177,14 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
     shutdown = true
     if (backgroundOperationPool != null) {
       backgroundOperationPool.shutdown()
-      val timeout = hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT, TimeUnit.SECONDS)
+      val timeout =
+        hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT, TimeUnit.SECONDS)
       try
         backgroundOperationPool.awaitTermination(timeout, TimeUnit.SECONDS)
       catch {
         case e: InterruptedException =>
-          logWarning("HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT = " + timeout + " seconds has been exceeded. RUNNING background operations will be shut down", e)
+          logWarning("HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT = " + timeout +
+            " seconds has been exceeded. RUNNING background operations will be shut down", e)
       }
       backgroundOperationPool = null
     }
@@ -181,7 +196,8 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
       FileUtils.forceDelete(operationLogRootDir)
     catch {
       case e: Exception =>
-        logWarning("Failed to cleanup root dir of HS2 logging: " + operationLogRootDir.getAbsolutePath, e)
+        logWarning("Failed to cleanup root dir of HS2 logging: " +
+          operationLogRootDir.getAbsolutePath, e)
     }
   }
 
@@ -205,7 +221,13 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
     // If doAs is set to true for HiveServer2, we will create a proxy object for the session impl.
     // Within the proxy object, we wrap the method call in a UserGroupInformation#doAs
     if (withImpersonation) {
-      val sessionWithUGI = new ThriftSessionImplWithUgi(protocol, username, password, hiveConf, ipAddress, delegationToken)
+      val sessionWithUGI =
+        new ThriftSessionImplWithUgi(protocol,
+          username,
+          password,
+          hiveConf,
+          ipAddress,
+          delegationToken)
       session = ThriftSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)
       sessionWithUGI.setProxySession(session)
     } else {

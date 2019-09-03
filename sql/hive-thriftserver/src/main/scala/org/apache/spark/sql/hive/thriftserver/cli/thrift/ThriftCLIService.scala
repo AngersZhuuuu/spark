@@ -21,27 +21,29 @@ import java.io.IOException
 import java.net.{InetAddress, UnknownHostException}
 import java.util
 import java.util.concurrent.TimeUnit
-
 import javax.security.auth.login.LoginException
+
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.thrift.TException
+import org.apache.thrift.protocol.TProtocol
+import org.apache.thrift.server.{ServerContext, TServer, TServerEventHandler}
+import org.apache.thrift.transport.TTransport
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.ServiceException
 import org.apache.spark.service.cli.thrift._
+import org.apache.spark.sql.hive.thriftserver.{AbstractService, ServiceUtils}
 import org.apache.spark.sql.hive.thriftserver.auth.{HiveAuthFactory, KERBEROS, NONE, TSetIpAddressProcessor}
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
-import org.apache.spark.sql.hive.thriftserver.{AbstractService, ServiceUtils}
 import org.apache.spark.sql.types.StructType
-import org.apache.thrift.TException
-import org.apache.thrift.protocol.TProtocol
-import org.apache.thrift.server.{ServerContext, TServer, TServerEventHandler}
-import org.apache.thrift.transport.TTransport
 
-import scala.collection.JavaConverters._
 
 abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   extends AbstractService(serviceName)
@@ -101,7 +103,9 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
 
     def preServe(): Unit = {}
 
-    def processContext(serverContext: ServerContext, input: TTransport, output: TTransport): Unit = {
+    def processContext(serverContext: ServerContext,
+                       input: TTransport,
+                       output: TTransport): Unit = {
       currentServerContext.set(serverContext)
     }
   }
@@ -127,7 +131,9 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     }
     // HTTP mode
     if (SparkThriftServer.isHTTPTransportMode(hiveConf)) {
-      workerKeepAliveTime = hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_WORKER_KEEPALIVE_TIME, TimeUnit.SECONDS)
+      workerKeepAliveTime = hiveConf.getTimeVar(
+        ConfVars.HIVE_SERVER2_THRIFT_HTTP_WORKER_KEEPALIVE_TIME,
+        TimeUnit.SECONDS)
       portString = System.getenv("HIVE_SERVER2_THRIFT_HTTP_PORT")
       if (portString != null) {
         portNum = Integer.valueOf(portString)
@@ -135,7 +141,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
         portNum = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT)
       }
     } else { // Binary mode
-      workerKeepAliveTime = hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_WORKER_KEEPALIVE_TIME, TimeUnit.SECONDS)
+      workerKeepAliveTime = hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_WORKER_KEEPALIVE_TIME,
+        TimeUnit.SECONDS)
       portString = System.getenv("HIVE_SERVER2_THRIFT_PORT")
       if (portString != null) {
         portNum = Integer.valueOf(portString)
@@ -274,7 +281,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
       // TODO: set real configuration map
       resp.setConfiguration(new util.HashMap[String, String])
       resp.setStatus(OK_STATUS)
-      val context: ThriftCLIServerContext = currentServerContext.get.asInstanceOf[ThriftCLIServerContext]
+      val context: ThriftCLIServerContext =
+        currentServerContext.get.asInstanceOf[ThriftCLIServerContext]
       if (context != null) {
         context.setSessionHandle(sessionHandle)
       }
@@ -290,7 +298,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     var clientIpAddress: String = null
     // Http transport mode.
     // We set the thread local ip address, in ThriftHttpServlet.
-    if (cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
+    if (cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
+      .equalsIgnoreCase("http")) {
       clientIpAddress = SessionManager.getIpAddress
     } else { // Kerberos
       if (isKerberosAuthMode) {
@@ -324,7 +333,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
       userName = TSetIpAddressProcessor.getUserName
     }
     // We set the thread local username, in ThriftHttpServlet.
-    if (cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
+    if (cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
+      .equalsIgnoreCase("http")) {
       userName = SessionManager.getUserName
     }
     if (userName == null) {
@@ -362,7 +372,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   @throws[SparkThriftServerSQLException]
   @throws[LoginException]
   @throws[IOException]
-  private[thrift] def getSessionHandle(req: TOpenSessionReq, res: TOpenSessionResp): SessionHandle = {
+  private[thrift] def getSessionHandle(req: TOpenSessionReq,
+                                       res: TOpenSessionResp): SessionHandle = {
     val userName: String = getUserName(req)
     val ipAddress: String = getIpAddress
     val protocol: TProtocolVersion = getMinVersion(CLIService.SERVER_VERSION, req.getClient_protocol)
@@ -485,7 +496,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   override def GetTypeInfo(req: TGetTypeInfoReq): TGetTypeInfoResp = {
     val resp: TGetTypeInfoResp = new TGetTypeInfoResp
     try {
-      val operationHandle: OperationHandle = cliService.getTypeInfo(new SessionHandle(req.getSessionHandle))
+      val operationHandle: OperationHandle =
+        cliService.getTypeInfo(new SessionHandle(req.getSessionHandle))
       resp.setOperationHandle(operationHandle.toTOperationHandle)
       resp.setStatus(OK_STATUS)
     } catch {
@@ -500,7 +512,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   override def GetCatalogs(req: TGetCatalogsReq): TGetCatalogsResp = {
     val resp: TGetCatalogsResp = new TGetCatalogsResp
     try {
-      val opHandle: OperationHandle = cliService.getCatalogs(new SessionHandle(req.getSessionHandle))
+      val opHandle: OperationHandle =
+        cliService.getCatalogs(new SessionHandle(req.getSessionHandle))
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(OK_STATUS)
     } catch {
@@ -515,7 +528,9 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   override def GetSchemas(req: TGetSchemasReq): TGetSchemasResp = {
     val resp: TGetSchemasResp = new TGetSchemasResp
     try {
-      val opHandle: OperationHandle = cliService.getSchemas(new SessionHandle(req.getSessionHandle), req.getCatalogName, req.getSchemaName)
+      val opHandle: OperationHandle =
+        cliService.getSchemas(new SessionHandle(req.getSessionHandle),
+          req.getCatalogName, req.getSchemaName)
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(OK_STATUS)
     } catch {
@@ -551,7 +566,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   override def GetTableTypes(req: TGetTableTypesReq): TGetTableTypesResp = {
     val resp: TGetTableTypesResp = new TGetTableTypesResp
     try {
-      val opHandle: OperationHandle = cliService.getTableTypes(new SessionHandle(req.getSessionHandle))
+      val opHandle: OperationHandle =
+        cliService.getTableTypes(new SessionHandle(req.getSessionHandle))
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(OK_STATUS)
     } catch {
@@ -602,14 +618,14 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     resp
   }
 
-  override def GetPrimaryKeys(tGetPrimaryKeysReq: TGetPrimaryKeysReq): TGetPrimaryKeysResp = {
+  override def GetPrimaryKeys(req: TGetPrimaryKeysReq): TGetPrimaryKeysResp = {
     val resp = new TGetPrimaryKeysResp
     try {
       val opHandle: OperationHandle =
-        cliService.getPrimaryKeys(new SessionHandle(tGetPrimaryKeysReq.getSessionHandle),
-          tGetPrimaryKeysReq.getCatalogName,
-          tGetPrimaryKeysReq.getSchemaName,
-          tGetPrimaryKeysReq.getTableName)
+        cliService.getPrimaryKeys(new SessionHandle(req.getSessionHandle),
+          req.getCatalogName,
+          req.getSchemaName,
+          req.getTableName)
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(OK_STATUS)
     } catch {
@@ -620,18 +636,18 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
     resp
   }
 
-  override def GetCrossReference(tGetCrossReferenceReq: TGetCrossReferenceReq): TGetCrossReferenceResp = {
+  override def GetCrossReference(req: TGetCrossReferenceReq): TGetCrossReferenceResp = {
     val resp = new TGetCrossReferenceResp
     try {
       val opHandle =
         cliService.getCrossReference(
-          new SessionHandle(tGetCrossReferenceReq.getSessionHandle),
-          tGetCrossReferenceReq.getParentCatalogName,
-          tGetCrossReferenceReq.getParentSchemaName,
-          tGetCrossReferenceReq.getParentTableName,
-          tGetCrossReferenceReq.getForeignCatalogName,
-          tGetCrossReferenceReq.getForeignSchemaName,
-          tGetCrossReferenceReq.getForeignTableName)
+          new SessionHandle(req.getSessionHandle),
+          req.getParentCatalogName,
+          req.getParentSchemaName,
+          req.getParentTableName,
+          req.getForeignCatalogName,
+          req.getForeignSchemaName,
+          req.getForeignTableName)
       resp.setOperationHandle(opHandle.toTOperationHandle)
       resp.setStatus(OK_STATUS)
     } catch {
@@ -646,7 +662,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   override def GetOperationStatus(req: TGetOperationStatusReq): TGetOperationStatusResp = {
     val resp: TGetOperationStatusResp = new TGetOperationStatusResp
     try {
-      val operationStatus: OperationStatus = cliService.getOperationStatus(new OperationHandle(req.getOperationHandle))
+      val operationStatus: OperationStatus =
+        cliService.getOperationStatus(new OperationHandle(req.getOperationHandle))
       resp.setOperationState(operationStatus.getState.toTOperationState)
       val opException: SparkThriftServerSQLException = operationStatus.getOperationException
       if (opException != null) {
@@ -695,7 +712,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   override def GetResultSetMetadata(req: TGetResultSetMetadataReq): TGetResultSetMetadataResp = {
     val resp: TGetResultSetMetadataResp = new TGetResultSetMetadataResp
     try {
-      val schema: StructType = cliService.getResultSetMetadata(new OperationHandle(req.getOperationHandle))
+      val schema: StructType =
+        cliService.getResultSetMetadata(new OperationHandle(req.getOperationHandle))
       resp.setSchema(SchemaMapper.toTTableSchema(schema))
       resp.setStatus(OK_STATUS)
     } catch {
@@ -739,10 +757,13 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
    * @throws SparkThriftServerSQLException
    */
   @throws[SparkThriftServerSQLException]
-  private def getProxyUser(realUser: String, sessionConf: util.Map[String, String], ipAddress: String): String = {
+  private def getProxyUser(realUser: String,
+                           sessionConf: util.Map[String, String],
+                           ipAddress: String): String = {
     var proxyUser: String = null
     // We set the thread local proxy username, in ThriftHttpServlet.
-    if (cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
+    if (cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
+      .equalsIgnoreCase("http")) {
       proxyUser = SessionManager.getProxyUserName
       logDebug("Proxy user from query string: " + proxyUser)
     }
@@ -769,7 +790,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
   }
 
   private def isKerberosAuthMode: Boolean = {
-    cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION).equalsIgnoreCase(KERBEROS.toString)
+    cliService.getHiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
+      .equalsIgnoreCase(KERBEROS.toString)
   }
 
 

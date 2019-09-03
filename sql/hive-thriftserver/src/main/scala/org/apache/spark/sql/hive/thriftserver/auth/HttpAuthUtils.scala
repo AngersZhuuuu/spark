@@ -20,8 +20,8 @@ package org.apache.spark.sql.hive.thriftserver.auth
 import java.security.{AccessController, PrivilegedExceptionAction}
 import java.util
 import java.util.{Random, StringTokenizer}
-
 import javax.security.auth.Subject
+
 import org.apache.commons.codec.binary.Base64
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.shims.ShimLoader
@@ -60,21 +60,26 @@ object HttpAuthUtils {
   private val COOKIE_CLIENT_USER_NAME = "cu"
   private val COOKIE_CLIENT_RAND_NUMBER = "rn"
   private val COOKIE_KEY_VALUE_SEPARATOR = "="
-  private val COOKIE_ATTRIBUTES = new util.HashSet[String](util.Arrays.asList(COOKIE_CLIENT_USER_NAME, COOKIE_CLIENT_RAND_NUMBER))
+  private val COOKIE_ATTRIBUTES =
+    new util.HashSet[String](util.Arrays.asList(COOKIE_CLIENT_USER_NAME, COOKIE_CLIENT_RAND_NUMBER))
 
   /**
    * @return Stringified Base64 encoded kerberosAuthHeader on success
    * @throws Exception
    */
   @throws[Exception]
-  def getKerberosServiceTicket(principal: String, host: String, serverHttpUrl: String, assumeSubject: Boolean): String = {
+  def getKerberosServiceTicket(principal: String,
+                               host: String,
+                               serverHttpUrl: String,
+                               assumeSubject: Boolean): String = {
     val serverPrincipal = ShimLoader.getHadoopThriftAuthBridge.getServerPrincipal(principal, host)
     if (assumeSubject) { // With this option, we're assuming that the external application,
       // using the JDBC driver has done a JAAS kerberos login already
       val context = AccessController.getContext
       val subject = Subject.getSubject(context)
       if (subject == null) throw new Exception("The Subject is not set")
-      Subject.doAs(subject, new HttpAuthUtils.HttpKerberosClientAction(serverPrincipal, serverHttpUrl))
+      Subject.doAs(subject,
+        new HttpAuthUtils.HttpKerberosClientAction(serverPrincipal, serverHttpUrl))
     }
     else { // JAAS login from ticket cache to setup the client UserGroupInformation
       val clientUGI = ShimLoader.getHadoopThriftAuthBridge.getCurrentUGIWithConf("kerberos")
@@ -92,8 +97,12 @@ object HttpAuthUtils {
    */
   def createCookieToken(clientUserName: String): String = {
     val sb = new StringBuffer
-    sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName).append(COOKIE_ATTR_SEPARATOR)
-    sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR).append(new Random(System.currentTimeMillis).nextLong)
+    sb.append(COOKIE_CLIENT_USER_NAME)
+      .append(COOKIE_KEY_VALUE_SEPARATOR)
+      .append(clientUserName).append(COOKIE_ATTR_SEPARATOR)
+    sb.append(COOKIE_CLIENT_RAND_NUMBER)
+      .append(COOKIE_KEY_VALUE_SEPARATOR)
+      .append(new Random(System.currentTimeMillis).nextLong)
     sb.toString
   }
 
@@ -147,7 +156,9 @@ object HttpAuthUtils {
     val SERVER_HTTP_URL = "SERVER_HTTP_URL"
   }
 
-  class HttpKerberosClientAction(val serverPrincipal: String, val serverHttpUrl: String) extends PrivilegedExceptionAction[String] {
+  class HttpKerberosClientAction(val serverPrincipal: String,
+                                 val serverHttpUrl: String)
+    extends PrivilegedExceptionAction[String] {
     base64codec = new Base64(0)
     httpContext = new BasicHttpContext
     httpContext.setAttribute(HttpKerberosClientAction.SERVER_HTTP_URL, serverHttpUrl)

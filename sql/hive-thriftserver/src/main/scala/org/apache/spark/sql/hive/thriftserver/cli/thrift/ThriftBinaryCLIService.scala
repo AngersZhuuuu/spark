@@ -23,14 +23,16 @@ import java.util.concurrent.{ExecutorService, SynchronousQueue, ThreadPoolExecut
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
-import org.apache.spark.sql.hive.thriftserver.cli.CLIService
-import org.apache.spark.sql.hive.thriftserver.server.ThreadFactoryWithGarbageCleanup
 import org.apache.thrift.TProcessorFactory
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.server.TThreadPoolServer
 import org.apache.thrift.transport.{TServerSocket, TTransportFactory}
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.service.server.ThreadFactoryWithGarbageCleanup
+import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
+import org.apache.spark.sql.hive.thriftserver.cli.CLIService
+
 
 class ThriftBinaryCLIService(cliService: CLIService)
   extends ThriftCLIService(cliService, classOf[ThriftBinaryCLIService].getSimpleName)
@@ -60,18 +62,23 @@ class ThriftBinaryCLIService(cliService: CLIService)
       } else {
         val keyStorePath: String = hiveConf.getVar(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH).trim
         if (keyStorePath.isEmpty) {
-          throw new IllegalArgumentException(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname + " Not configured for SSL connection")
+          throw new IllegalArgumentException(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname +
+            " Not configured for SSL connection")
         }
-        val keyStorePassword: String = ShimLoader.getHadoopShims.getPassword(hiveConf, HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname)
-        serverSocket = HiveAuthFactory.getServerSSLSocket(hiveHost, portNum, keyStorePath, keyStorePassword, sslVersionBlacklist)
+        val keyStorePassword: String = ShimLoader.getHadoopShims
+          .getPassword(hiveConf, HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname)
+        serverSocket = HiveAuthFactory.getServerSSLSocket(hiveHost, portNum, keyStorePath,
+          keyStorePassword, sslVersionBlacklist)
       }
       // Server args
       val maxMessageSize: Int =
         hiveConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_MAX_MESSAGE_SIZE)
       val requestTimeout: Int =
-        hiveConf.getTimeVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT, TimeUnit.SECONDS).toInt
+        hiveConf.getTimeVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT,
+          TimeUnit.SECONDS).toInt
       val beBackoffSlotLength: Int =
-        hiveConf.getTimeVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH, TimeUnit.MILLISECONDS).toInt
+        hiveConf.getTimeVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH,
+          TimeUnit.MILLISECONDS).toInt
       val sargs: TThreadPoolServer.Args =
         new TThreadPoolServer.Args(serverSocket)
           .processorFactory(processorFactory)
@@ -87,12 +94,15 @@ class ThriftBinaryCLIService(cliService: CLIService)
       // TCP Server
       server = new TThreadPoolServer(sargs)
       server.setServerEventHandler(serverEventHandler)
-      val msg: String = "Starting " + classOf[ThriftBinaryCLIService].getSimpleName + " on port " + serverSocket.getServerSocket.getLocalPort + " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads"
+      val msg: String = "Starting " + classOf[ThriftBinaryCLIService].getSimpleName +
+        " on port " + serverSocket.getServerSocket.getLocalPort + " with " +
+        minWorkerThreads + "..." + maxWorkerThreads + " worker threads"
       logInfo(msg)
       server.serve()
     } catch {
       case t: Throwable =>
-        logError("Error starting HiveServer2: could not start " + classOf[ThriftBinaryCLIService].getSimpleName, t)
+        logError("Error starting HiveServer2: could not start " +
+          classOf[ThriftBinaryCLIService].getSimpleName, t)
         System.exit(-1)
     }
   }
