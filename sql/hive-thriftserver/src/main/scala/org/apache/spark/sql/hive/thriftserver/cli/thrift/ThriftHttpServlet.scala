@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.thriftserver.cli.thrift
 
 import java.io.{IOException, UnsupportedEncodingException}
 import java.security.PrivilegedExceptionAction
-import java.util
 import java.util.Random
 import java.util.concurrent.TimeUnit
 import javax.servlet.ServletException
@@ -477,15 +476,14 @@ class ThriftHttpServlet(processor: TProcessor,
   private def getDoAsQueryParam(queryString: String): String = {
     logDebug("URL query string:" + queryString)
     if (queryString == null) return null
-    val params: util.Hashtable[_, _] =
+    val params =
       javax.servlet.http.HttpUtils.parseQueryString(queryString)
-    val keySet: util.Set[String] = params.keySet.asInstanceOf[util.Set[String]]
-
-    for (key <- keySet.asScala) {
+    val keySet: Set[String] = params.keySet.asScala.asInstanceOf[Set[String]]
+    keySet.foreach(key => {
       if (key.equalsIgnoreCase("doAs")) {
-        return params.get(key)(0)
+        return params.get(key).asInstanceOf[Array[String]](0)
       }
-    }
+    })
     null
   }
 }

@@ -521,7 +521,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     try {
       acquire(true)
       // Iterate through the opHandles and close their operations
-      for (opHandle <- _opHandleSet) {
+      for (opHandle <- _opHandleSet.asScala) {
         _operationManager.closeOperation(opHandle)
       }
       _opHandleSet.clear

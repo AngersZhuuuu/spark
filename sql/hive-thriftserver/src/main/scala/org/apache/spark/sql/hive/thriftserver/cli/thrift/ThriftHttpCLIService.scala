@@ -27,7 +27,7 @@ import org.apache.hadoop.util.Shell
 import org.apache.thrift.TProcessor
 import org.apache.thrift.protocol.{TBinaryProtocol, TProtocolFactory}
 import org.apache.thrift.server.TServlet
-import org.eclipse.jetty.server.{AbstractConnectionFactory, ConnectionFactory, HttpConnectionFactory, ServerConnector}
+import org.eclipse.jetty.server._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.ssl.SslContextFactory
 import org.eclipse.jetty.util.thread.{ExecutorThreadPool, ScheduledExecutorScheduler}
@@ -58,7 +58,8 @@ class ThriftHttpCLIService(cliService: CLIService)
           new ThreadFactoryWithGarbageCleanup(threadPoolName))
       val threadPool: ExecutorThreadPool = new ExecutorThreadPool(executorService)
       // HTTP Server
-      httpServer = new org.eclipse.jetty.server.Server(threadPool)
+      httpServer = new org.eclipse.jetty.server.Server()
+      httpServer.setThreadPool(threadPool)
       // Connector configs
       var connectionFactories: Array[ConnectionFactory] = null
       val useSsl: Boolean = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_USE_SSL)
@@ -77,7 +78,7 @@ class ThriftHttpCLIService(cliService: CLIService)
           throw new IllegalArgumentException(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname +
             " Not configured for SSL connection")
         }
-        val sslContextFactory: SslContextFactory = new SslContextFactory.Server
+        val sslContextFactory: SslContextFactory = new SslContextFactory
         val excludedProtocols: Array[String] =
           hiveConf.getVar(ConfVars.HIVE_SSL_PROTOCOL_BLACKLIST).split(",")
         logInfo("HTTP Server SSL: adding excluded protocols: " + excludedProtocols.mkString(","))
