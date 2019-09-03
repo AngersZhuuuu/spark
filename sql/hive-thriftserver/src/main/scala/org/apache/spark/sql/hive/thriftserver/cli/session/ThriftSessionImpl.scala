@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.thriftserver.cli.session
 import java.io._
 import java.util
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -27,6 +29,7 @@ import org.apache.hadoop.hive.conf.SystemVariables._
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.ShimLoader
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
@@ -36,7 +39,6 @@ import org.apache.spark.sql.hive.thriftserver.server.ThreadWithGarbageCleanup
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
 
-import scala.collection.JavaConversions._
 
 class ThriftSessionImpl(_protocol: TProtocolVersion,
                         var _username: String,
@@ -77,8 +79,9 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     _sessionState.setUserIpAddress(_ipAddress)
     _sessionState.setIsHiveServerQuery(true)
     SessionState.start(_sessionState)
-    if (sessionConfMap != null)
-      configureSession(sessionConfMap)
+    if (sessionConfMap != null) {
+      configureSession(sessionConfMap.asJava)
+    }
     _lastAccessTime = System.currentTimeMillis
     _lastIdleTime = _lastAccessTime
   }
@@ -87,7 +90,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
   private def configureSession(sessionConfMap: util.Map[String, String]): Unit = {
     SessionState.setCurrentSessionState(_sessionState)
 
-    for (entry <- sessionConfMap.entrySet) {
+    sessionConfMap.entrySet().forEach(entry => {
       val key = entry.getKey
       if (key.startsWith("set:")) {
         try
@@ -101,7 +104,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
       } else {
         _hiveConf.verifyAndSet(key, entry.getValue)
       }
-    }
+    })
   }
 
   // Copy from org.apache.hadoop.hive.ql.processors.SetProcessor, only change:
@@ -111,11 +114,11 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     var varname = key
     val ss = SessionState.get
     if (value.contains("\n")) {
-      ss.err.println("Warning: Value had a \\n character in it.")
+      logError("Warning: Value had a \\n character in it.")
     }
     varname = varname.trim
     if (varname.startsWith(ENV_PREFIX)) {
-      ss.err.println("env:* variables can not be set.")
+      logError("env:* variables can not be set.")
       return 1
     } else if (varname.startsWith(SYSTEM_PREFIX)) {
       val propName = varname.substring(SYSTEM_PREFIX.length)
@@ -125,7 +128,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
       setConf(varname, propName, value, true)
     } else if (varname.startsWith(HIVEVAR_PREFIX)) {
       val propName = varname.substring(HIVEVAR_PREFIX.length)
-      ss.getHiveVariables.put(propName,  value)
+      ss.getHiveVariables.put(propName, value)
     } else if (varname.startsWith(METACONF_PREFIX)) {
       val propName = varname.substring(METACONF_PREFIX.length)
       val hive = Hive.get(ss.getConf)
@@ -187,7 +190,8 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
         case GetInfoType.CLI_DBMS_VER =>
           return new GetInfoValue(HiveVersionInfo.getVersion)
         case _ =>
-          throw new SparkThriftServerSQLException("Unrecognized GetInfoType value: " + getInfoType.toString)
+          throw new SparkThriftServerSQLException("Unrecognized GetInfoType value: " +
+            getInfoType.toString)
       }
     } finally {
       release(true)
@@ -218,7 +222,12 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
                                        runAsync: Boolean): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
-    val operation = operationManager.newExecuteStatementOperation(getSession, statement, confOverlay, runAsync)
+    val operation = operationManager
+      .newExecuteStatementOperation(
+        getSession,
+        statement,
+        confOverlay,
+        runAsync)
     val opHandle = operation.getHandle
     try {
       operation.run
@@ -226,8 +235,9 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
       opHandle
     } catch {
       case e: SparkThriftServerSQLException =>
-        // Referring to SQLOperation.java, there is no chance that a HiveSQLException throws and the asyn
-        // background operation submits to thread pool successfully at the same time. So, Cleanup
+        // Referring to SQLOperation.java, there is no chance that a
+        // HiveSQLException throws and the asyn background operation
+        // submits to thread pool successfully at the same time. So, Cleanup
         // opHandle directly when got HiveSQLException
         operationManager.closeOperation(opHandle)
         throw e
@@ -329,7 +339,13 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
                          tableTypes: List[String]): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
-    val operation = operationManager.newGetTablesOperation(getSession, catalogName, schemaName, tableName, tableTypes)
+    val operation = operationManager
+      .newGetTablesOperation(
+        getSession,
+        catalogName,
+        schemaName,
+        tableName,
+        tableTypes)
     val opHandle = operation.getHandle
     try {
       operation.run
@@ -385,7 +401,13 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
                           columnName: String): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
-    val operation = operationManager.newGetColumnsOperation(getSession, catalogName, schemaName, tableName, columnName)
+    val operation = operationManager
+      .newGetColumnsOperation(
+        getSession,
+        catalogName,
+        schemaName,
+        tableName,
+        columnName)
     val opHandle = operation.getHandle
     try {
       operation.run
@@ -414,7 +436,12 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
                             functionName: String): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
-    val operation = operationManager.newGetFunctionsOperation(getSession, catalogName, schemaName, functionName)
+    val operation = operationManager
+      .newGetFunctionsOperation(
+        getSession,
+        catalogName,
+        schemaName,
+        functionName)
     val opHandle = operation.getHandle
     try {
       operation.run
@@ -433,7 +460,12 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
   override def getPrimaryKeys(catalog: String, schema: String, table: String): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
-    val operation: Operation = operationManager.newGetPrimaryKeysOperation(getSession, catalog, schema, table)
+    val operation: Operation = operationManager
+      .newGetPrimaryKeysOperation(
+        getSession,
+        catalog,
+        schema,
+        table)
     val opHandle = operation.getHandle
     try {
       operation.run
@@ -449,10 +481,23 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
   }
 
   @throws[SparkThriftServerSQLException]
-  override def getCrossReference(primaryCatalog: String, primarySchema: String, primaryTable: String, foreignCatalog: String, foreignSchema: String, foreignTable: String): OperationHandle = {
+  override def getCrossReference(primaryCatalog: String,
+                                 primarySchema: String,
+                                 primaryTable: String,
+                                 foreignCatalog: String,
+                                 foreignSchema: String,
+                                 foreignTable: String): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
-    val operation: Operation = operationManager.newGetCrossReferenceOperation(getSession, primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema, foreignTable)
+    val operation: Operation = operationManager
+      .newGetCrossReferenceOperation(
+        getSession,
+        primaryCatalog,
+        primarySchema,
+        primaryTable,
+        foreignCatalog,
+        foreignSchema,
+        foreignTable)
     val opHandle = operation.getHandle
     try {
       operation.run
@@ -476,7 +521,6 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     try {
       acquire(true)
       // Iterate through the opHandles and close their operations
-      import scala.collection.JavaConversions._
       for (opHandle <- _opHandleSet) {
         _operationManager.closeOperation(opHandle)
       }
@@ -564,18 +608,33 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     }
   }
 
-  override def getDelegationToken(authFactory: HiveAuthFactory, owner: String, renewer: String, remoteAddr: String): String = {
-    HiveAuthFactory.verifyProxyAccess(getUsername, owner, getIpAddress, getHiveConf)
+  override def getDelegationToken(authFactory: HiveAuthFactory,
+                                  owner: String,
+                                  renewer: String,
+                                  remoteAddr: String): String = {
+    HiveAuthFactory.verifyProxyAccess(
+      getUsername,
+      owner,
+      getIpAddress,
+      getHiveConf)
     authFactory.getDelegationToken(owner, renewer, remoteAddr)
   }
 
   override def cancelDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit = {
-    HiveAuthFactory.verifyProxyAccess(getUsername, getUserFromToken(authFactory, tokenStr), getIpAddress, getHiveConf)
+    HiveAuthFactory.verifyProxyAccess(
+      getUsername,
+      getUserFromToken(authFactory, tokenStr),
+      getIpAddress,
+      getHiveConf)
     authFactory.cancelDelegationToken(tokenStr)
   }
 
   override def renewDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit = {
-    HiveAuthFactory.verifyProxyAccess(getUsername, getUserFromToken(authFactory, tokenStr), getIpAddress, getHiveConf)
+    HiveAuthFactory.verifyProxyAccess(
+      getUsername,
+      getUserFromToken(authFactory, tokenStr),
+      getIpAddress,
+      getHiveConf)
     authFactory.renewDelegationToken(tokenStr)
   }
 
@@ -586,7 +645,8 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     authFactory.getUserFromToken(tokenStr)
   }
 
-  protected def acquire(userAccess: Boolean): Unit = { // Need to make sure that the this HiveServer2's session's SessionState is
+  protected def acquire(userAccess: Boolean): Unit = {
+    // Need to make sure that the this HiveServer2's session's SessionState is
     // stored in the thread local for the handler thread.
     SessionState.setCurrentSessionState(_sessionState)
     if (userAccess) {
@@ -597,8 +657,8 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
   /**
    * 1. We'll remove the ThreadLocal SessionState as this thread might now serve
    * other requests.
-   * 2. We'll cache the ThreadLocal RawStore object for this background thread for an orderly cleanup
-   * when this thread is garbage collected later.
+   * 2. We'll cache the ThreadLocal RawStore object for this background thread
+   * for an orderly cleanup when this thread is garbage collected later.
    *
    * @see org.apache.hive.service.server.ThreadWithGarbageCleanup#finalize()
    */
@@ -630,15 +690,14 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     }
   }
 
-  private def closeTimedOutOperations(operations: util.List[Operation]): Unit = {
+  private def closeTimedOutOperations(operations: List[Operation]): Unit = {
     acquire(false)
     try {
-      import scala.collection.JavaConversions._
       for (operation <- operations) {
         _opHandleSet.remove(operation.getHandle)
-        try
+        try {
           operation.close
-        catch {
+        } catch {
           case e: Exception =>
             logWarning("Exception is thrown closing timed-out operation " + operation.getHandle, e)
         }
@@ -663,7 +722,9 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
    *
    * @param sessionManager
    */
-  override def setSessionManager(sessionManager: SessionManager): Unit = _sessionManager = sessionManager
+  override def setSessionManager(sessionManager: SessionManager): Unit = {
+    _sessionManager = sessionManager
+  }
 
   /**
    * Get the session manager for the session
@@ -678,7 +739,9 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
    *
    * @param operationManager
    */
-  override def setOperationManager(operationManager: OperationManager): Unit = _operationManager = operationManager
+  override def setOperationManager(operationManager: OperationManager): Unit = {
+    _operationManager = operationManager
+  }
 
   /**
    * Check whether operation logging is enabled and session dir is created successfully
@@ -699,19 +762,23 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
    */
   override def setOperationLogSessionDir(operationLogRootDir: File): Unit = {
     if (!operationLogRootDir.exists) {
-      logWarning("The operation log root directory is removed, recreating: " + operationLogRootDir.getAbsolutePath)
+      logWarning("The operation log root directory is removed, recreating: " +
+        operationLogRootDir.getAbsolutePath)
       if (!operationLogRootDir.mkdirs) {
-        logWarning("Unable to create operation log root directory: " + operationLogRootDir.getAbsolutePath)
+        logWarning("Unable to create operation log root directory: " +
+          operationLogRootDir.getAbsolutePath)
       }
     }
     if (!operationLogRootDir.canWrite) {
-      logWarning("The operation log root directory is not writable: " + operationLogRootDir.getAbsolutePath)
+      logWarning("The operation log root directory is not writable: " +
+        operationLogRootDir.getAbsolutePath)
     }
     _sessionLogDir = new File(operationLogRootDir, _sessionHandle.getHandleIdentifier.toString)
     _isOperationLogEnabled = true
     if (!_sessionLogDir.exists) {
       if (!_sessionLogDir.mkdir) {
-        logWarning("Unable to create operation log session directory: " + _sessionLogDir.getAbsolutePath)
+        logWarning("Unable to create operation log session directory: " +
+          _sessionLogDir.getAbsolutePath)
         _isOperationLogEnabled = false
       }
     }
