@@ -21,13 +21,13 @@ import org.apache.spark.service.cli.thrift.TColumnDesc
 import org.apache.spark.sql.types.StructField
 
 /**
-  * A wrapper class for Spark's [[StructField]] with a column position, and can be transform to
-  * [[TColumnDesc]]
-  */
+ * A wrapper class for Spark's [[StructField]] with a column position,
+ * and can be transform to [[TColumnDesc]]
+ */
 case class ColumnDescriptor(field: StructField, pos: Int) {
   /**
-    * Transform a [[ColumnDescriptor]] to a [[TColumnDesc]] instance.
-    */
+   * Transform a [[ColumnDescriptor]] to a [[TColumnDesc]] instance.
+   */
   def toTColumnDesc: TColumnDesc = {
     val tColumnDesc = new TColumnDesc
     if (field != null) {

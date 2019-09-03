@@ -22,28 +22,29 @@ import java.security.PrivilegedExceptionAction
 import java.util
 import java.util.Random
 import java.util.concurrent.TimeUnit
-
 import javax.servlet.ServletException
 import javax.servlet.http.{Cookie, HttpServletRequest, HttpServletResponse}
 import javax.ws.rs.core.NewCookie
+
+import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
+
 import org.apache.commons.codec.binary.{Base64, StringUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.spark.service.auth.AuthenticationProviderFactory.AuthMethods
-import org.apache.spark.internal.Logging
-import org.apache.spark.service.auth.{AuthenticationProviderFactory, HttpAuthenticationException, PasswdAuthenticationProvider}
-import org.apache.spark.sql.hive.thriftserver.CookieSigner
-import org.apache.spark.sql.hive.thriftserver.auth.{HttpAuthUtils, KERBEROS, NOSASL}
-import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 import org.apache.thrift.TProcessor
 import org.apache.thrift.protocol.TProtocolFactory
 import org.apache.thrift.server.TServlet
 import org.ietf.jgss._
 
-import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
+import org.apache.spark.internal.Logging
+import org.apache.spark.service.auth.{AuthenticationProviderFactory, HttpAuthenticationException, PasswdAuthenticationProvider}
+import org.apache.spark.service.auth.AuthenticationProviderFactory.AuthMethods
+import org.apache.spark.sql.hive.thriftserver.CookieSigner
+import org.apache.spark.sql.hive.thriftserver.auth.{HttpAuthUtils, KERBEROS, NOSASL}
+import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 
 class ThriftHttpServlet(processor: TProcessor,
                         protocolFactory: TProtocolFactory,
@@ -56,7 +57,8 @@ class ThriftHttpServlet(processor: TProcessor,
   private var signer: CookieSigner = null
   val AUTH_COOKIE = "hive.server2.auth"
   private val RAN = new Random
-  private val isCookieAuthEnabled: Boolean = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_AUTH_ENABLED)
+  private val isCookieAuthEnabled: Boolean =
+    hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_AUTH_ENABLED)
 
   private var cookieDomain: String = null
   private var cookiePath: String = null
@@ -71,11 +73,14 @@ class ThriftHttpServlet(processor: TProcessor,
       val secret = RAN.nextLong.toString
       logDebug("Using the random number as the secret for cookie generation " + secret)
       this.signer = new CookieSigner(secret.getBytes)
-      this.cookieMaxAge = hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_MAX_AGE, TimeUnit.SECONDS).toInt
+      this.cookieMaxAge =
+        hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_MAX_AGE,
+          TimeUnit.SECONDS).toInt
       this.cookieDomain = hiveConf.getVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_DOMAIN)
       this.cookiePath = hiveConf.getVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_PATH)
       this.isCookieSecure = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_IS_SECURE)
-      this.isHttpOnlyCookie = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_IS_HTTPONLY)
+      this.isHttpOnlyCookie =
+        hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_IS_HTTPONLY)
     }
   } catch {
     case NonFatal(e) =>
@@ -84,7 +89,8 @@ class ThriftHttpServlet(processor: TProcessor,
 
   @throws[ServletException]
   @throws[IOException]
-  override protected def doPost(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+  override protected def doPost(request: HttpServletRequest,
+                                response: HttpServletResponse): Unit = {
     var clientUserName: String = null
     var clientIpAddress: String = null
     var requireNewCookie: Boolean = false
@@ -138,7 +144,9 @@ class ThriftHttpServlet(processor: TProcessor,
         if (isKerberosAuthMode(authType)) {
           response.addHeader(HttpAuthUtils.WWW_AUTHENTICATE, HttpAuthUtils.NEGOTIATE)
         }
+        // scalastyle:off
         response.getWriter.println("Authentication Error: " + e.getMessage)
+        // scalastyle:on
     } finally {
       // Clear the thread locals
       SessionManager.clearUserName
@@ -178,7 +186,7 @@ class ThriftHttpServlet(processor: TProcessor,
           if (userName == null) {
             logWarning("Invalid cookie token " + currValue)
           } else {
-            //We have found a valid cookie in the client request.
+            // We have found a valid cookie in the client request.
             logDebug("Validated the cookie for user " + userName)
             return userName
           }
@@ -214,7 +222,8 @@ class ThriftHttpServlet(processor: TProcessor,
    * @throws UnsupportedEncodingException
    */
   @throws[UnsupportedEncodingException]
-  private def validateCookie(request: HttpServletRequest): String = { // Find all the valid cookies associated with the request.
+  private def validateCookie(request: HttpServletRequest): String = {
+    // Find all the valid cookies associated with the request.
     val cookies: Array[Cookie] = request.getCookies
     if (cookies == null) {
       logDebug("No valid cookies associated with the request " + request)
@@ -310,7 +319,8 @@ class ThriftHttpServlet(processor: TProcessor,
         return httpUGI.doAs(new HttpKerberosServerAction(request, httpUGI))
       catch {
         case e: Exception =>
-          logInfo("Failed to authenticate with http/_HOST kerberos principal, " + "trying with hive/_HOST kerberos principal")
+          logInfo("Failed to authenticate with http/_HOST kerberos principal, " +
+            "trying with hive/_HOST kerberos principal")
       }
     }
     // Now try with hive/_HOST principal
@@ -323,8 +333,8 @@ class ThriftHttpServlet(processor: TProcessor,
     }
   }
 
-  private[thrift] class HttpKerberosServerAction private[thrift](var request: HttpServletRequest,
-                                                                 var serviceUGI: UserGroupInformation)
+  private[thrift] class HttpKerberosServerAction(var request: HttpServletRequest,
+                                                 var serviceUGI: UserGroupInformation)
     extends PrivilegedExceptionAction[String] {
     @throws[HttpAuthenticationException]
     override def run: String = { // Get own Kerberos credentials for accepting connection
@@ -352,7 +362,10 @@ class ThriftHttpServlet(processor: TProcessor,
         val inToken: Array[Byte] = Base64.decodeBase64(serviceTicketBase64.getBytes)
         gssContext.acceptSecContext(inToken, 0, inToken.length)
         // Authenticate or deny based on its context completion
-        if (!gssContext.isEstablished) throw new HttpAuthenticationException("Kerberos authentication failed: " + "unable to establish context with the service ticket " + "provided by the client.")
+        if (!gssContext.isEstablished) {
+          throw new HttpAuthenticationException("Kerberos authentication failed: " +
+            "unable to establish context with the service ticket " + "provided by the client.")
+        }
         else getPrincipalWithoutRealmAndHost(gssContext.getSrcName.toString)
       } catch {
         case e: GSSException =>
@@ -399,7 +412,10 @@ class ThriftHttpServlet(processor: TProcessor,
   private def getUsername(request: HttpServletRequest, authType: String): String = {
     val creds: Array[String] = getAuthHeaderTokens(request, authType)
     // Username must be present
-    if (creds(0) == null || creds(0).isEmpty) throw new HttpAuthenticationException("Authorization header received " + "from the client does not contain username.")
+    if (creds(0) == null || creds(0).isEmpty) {
+      throw new HttpAuthenticationException("Authorization header received " +
+        "from the client does not contain username.")
+    }
     creds(0)
   }
 
@@ -407,14 +423,18 @@ class ThriftHttpServlet(processor: TProcessor,
   private def getPassword(request: HttpServletRequest, authType: String): String = {
     val creds: Array[String] = getAuthHeaderTokens(request, authType)
     // Password must be present
-    if (creds(1) == null || creds(1).isEmpty) throw new HttpAuthenticationException("Authorization header received " + "from the client does not contain username.")
+    if (creds(1) == null || creds(1).isEmpty) {
+      throw new HttpAuthenticationException("Authorization header received " +
+        "from the client does not contain username.")
+    }
     creds(1)
   }
 
   @throws[HttpAuthenticationException]
   private def getAuthHeaderTokens(request: HttpServletRequest, authType: String): Array[String] = {
     val authHeaderBase64: String = getAuthHeader(request, authType)
-    val authHeaderString: String = StringUtils.newStringUtf8(Base64.decodeBase64(authHeaderBase64.getBytes))
+    val authHeaderString: String =
+      StringUtils.newStringUtf8(Base64.decodeBase64(authHeaderBase64.getBytes))
     val creds: Array[String] = authHeaderString.split(":")
     creds
   }
@@ -432,7 +452,8 @@ class ThriftHttpServlet(processor: TProcessor,
     val authHeader: String = request.getHeader(HttpAuthUtils.AUTHORIZATION)
     // Each http request must have an Authorization header
     if (authHeader == null || authHeader.isEmpty) {
-      throw new HttpAuthenticationException("Authorization header received " + "from the client is empty.")
+      throw new HttpAuthenticationException("Authorization header received " +
+        "from the client is empty.")
     }
     var authHeaderBase64String: String = null
     var beginIndex: Int = 0
@@ -444,18 +465,21 @@ class ThriftHttpServlet(processor: TProcessor,
     authHeaderBase64String = authHeader.substring(beginIndex)
     // Authorization header must have a payload
     if (authHeaderBase64String == null || authHeaderBase64String.isEmpty) {
-      throw new HttpAuthenticationException("Authorization header received " + "from the client does not contain any data.")
+      throw new HttpAuthenticationException("Authorization header received " +
+        "from the client does not contain any data.")
     }
     authHeaderBase64String
   }
 
-  private def isKerberosAuthMode(authType: String): Boolean = authType.equalsIgnoreCase(KERBEROS.toString)
+  private def isKerberosAuthMode(authType: String): Boolean =
+    authType.equalsIgnoreCase(KERBEROS.toString)
 
   private def getDoAsQueryParam(queryString: String): String = {
     logDebug("URL query string:" + queryString)
     if (queryString == null) return null
-    val params: util.Map[String, Array[String]] = javax.servlet.http.HttpUtils.parseQueryString(queryString)
-    val keySet: util.Set[String] = params.keySet
+    val params: util.Hashtable[_, _] =
+      javax.servlet.http.HttpUtils.parseQueryString(queryString)
+    val keySet: util.Set[String] = params.keySet.asInstanceOf[util.Set[String]]
 
     for (key <- keySet.asScala) {
       if (key.equalsIgnoreCase("doAs")) {

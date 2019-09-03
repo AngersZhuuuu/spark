@@ -23,7 +23,7 @@ package org.apache.spark.sql.hive.thriftserver.cli
  */
 class PatternOrIdentifier(var text: String) {
 
-  var isPt:Boolean = false
+  var isPt: Boolean = false
 
   def isPattern: Boolean = isPt
 

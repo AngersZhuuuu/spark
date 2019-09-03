@@ -19,11 +19,14 @@ package org.apache.spark.sql.hive.thriftserver.server.cli
 
 import java.sql.SQLException
 
-import org.apache.spark.service.cli.thrift.{TStatus, TStatusCode}
-
 import scala.collection.JavaConverters._
 
-class SparkThriftServerSQLException(reason: String, sqlState: String, vendorCode: Int, cause: Throwable)
+import org.apache.spark.service.cli.thrift.{TStatus, TStatusCode}
+
+class SparkThriftServerSQLException(reason: String,
+                                    sqlState: String,
+                                    vendorCode: Int,
+                                    cause: Throwable)
   extends SQLException(reason, sqlState, vendorCode, cause) {
 
   def this(reason: String, sqlState: String, cause: Throwable) = this(reason, sqlState, 0, cause)

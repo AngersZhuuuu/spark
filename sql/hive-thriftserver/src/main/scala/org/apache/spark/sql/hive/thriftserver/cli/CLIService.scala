@@ -18,9 +18,9 @@
 package org.apache.spark.sql.hive.thriftserver.cli
 
 import java.io.IOException
-import java.util.concurrent.{CancellationException, ExecutionException, TimeUnit, TimeoutException}
-
+import java.util.concurrent.{CancellationException, ExecutionException, TimeoutException, TimeUnit}
 import javax.security.auth.login.LoginException
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.api.MetaException
@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.ServiceException
 import org.apache.spark.service.cli.thrift.TProtocolVersion
@@ -98,7 +99,8 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
       applyAuthorizationConfigPolicy(hiveConf)
     } catch {
       case e: Exception =>
-        throw new RuntimeException("Error applying authorization policy on hive configuration: " + e.getMessage, e)
+        throw new RuntimeException("Error applying authorization policy " +
+          "on hive configuration: " + e.getMessage, e)
     }
     setupBlockedUdfs()
     super.init(hiveConf)
@@ -106,7 +108,8 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
 
   @throws[HiveException]
   @throws[MetaException]
-  private def applyAuthorizationConfigPolicy(newHiveConf: HiveConf): Unit = { // authorization setup using SessionState should be revisited eventually, as
+  private def applyAuthorizationConfigPolicy(newHiveConf: HiveConf): Unit = {
+    // authorization setup using SessionState should be revisited eventually, as
     // authorization and authentication are not session specific settings
     val ss = new SessionState(newHiveConf)
     ss.setIsHiveServerQuery(true)
@@ -115,7 +118,8 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   }
 
   private def setupBlockedUdfs(): Unit = {
-    FunctionRegistry.setupPermissionsForBuiltinUDFs(hiveConf.getVar(ConfVars.HIVE_SERVER2_BUILTIN_UDF_WHITELIST),
+    FunctionRegistry.setupPermissionsForBuiltinUDFs(
+      hiveConf.getVar(ConfVars.HIVE_SERVER2_BUILTIN_UDF_WHITELIST),
       hiveConf.getVar(ConfVars.HIVE_SERVER2_BUILTIN_UDF_BLACKLIST))
   }
 
@@ -127,7 +131,14 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
                   username: String,
                   password: String,
                   configuration: Predef.Map[String, String]): SessionHandle = {
-    val sessionHandle: SessionHandle = sessionManager.openSession(protocol, username, password, null, configuration, false, null)
+    val sessionHandle: SessionHandle =
+      sessionManager.openSession(protocol,
+        username,
+        password,
+        null,
+        configuration,
+        false,
+        null)
     logDebug(sessionHandle + ": openSession()")
     sessionHandle
   }
@@ -137,7 +148,14 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
                   password: String,
                   ipAddress: String,
                   configuration: Predef.Map[String, String]): SessionHandle = {
-    val sessionHandle = sessionManager.openSession(protocol, username, password, ipAddress, configuration, false, null)
+    val sessionHandle =
+      sessionManager.openSession(protocol,
+        username,
+        password,
+        ipAddress,
+        configuration,
+        false,
+        null)
     logDebug(sessionHandle + ": openSession()")
     sessionHandle
   }
@@ -147,7 +165,14 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
                                    password: String,
                                    configuration: Predef.Map[String, String],
                                    delegationToken: String): SessionHandle = {
-    val sessionHandle = sessionManager.openSession(protocol, username, password, null, configuration, true, delegationToken)
+    val sessionHandle =
+      sessionManager.openSession(protocol,
+        username,
+        password,
+        null,
+        configuration,
+        true,
+        delegationToken)
     logDebug(sessionHandle + ": openSessionWithImpersonation()")
     sessionHandle
   }
@@ -227,7 +252,9 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   override def executeStatementAsync(sessionHandle: SessionHandle,
                                      statement: String,
                                      confOverlay: Predef.Map[String, String]): OperationHandle = {
-    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).executeStatementAsync(statement, confOverlay)
+    val opHandle: OperationHandle =
+      sessionManager.getSession(sessionHandle)
+        .executeStatementAsync(statement, confOverlay)
     logDebug(sessionHandle + ": executeStatementAsync()")
     opHandle
   }
@@ -291,28 +318,38 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
                             catalogName: String,
                             schemaName: String,
                             functionName: String): OperationHandle = {
-    val opHandle: OperationHandle = sessionManager.getSession(sessionHandle).getFunctions(catalogName, schemaName, functionName)
+    val opHandle: OperationHandle =
+      sessionManager.getSession(sessionHandle)
+        .getFunctions(catalogName, schemaName, functionName)
     logDebug(sessionHandle + ": getFunctions()")
     opHandle
   }
 
-  /* (non-Javadoc)
-    * @see org.apache.hive.service.cli.ICLIService#getPrimaryKeys(org.apache.hive.service.cli.SessionHandle)
-    *//* (non-Javadoc)
-    * @see org.apache.hive.service.cli.ICLIService#getPrimaryKeys(org.apache.hive.service.cli.SessionHandle)
-    */
   @throws[SparkThriftServerSQLException]
-  override def getPrimaryKeys(sessionHandle: SessionHandle, catalog: String, schema: String, table: String): OperationHandle = {
+  override def getPrimaryKeys(sessionHandle: SessionHandle,
+                              catalog: String,
+                              schema: String,
+                              table: String): OperationHandle = {
     val opHandle = sessionManager.getSession(sessionHandle).getPrimaryKeys(catalog, schema, table)
     logDebug(sessionHandle + ": getPrimaryKeys()")
     opHandle
   }
 
-  /* (non-Javadoc)
-   * @see org.apache.hive.service.cli.ICLIService#getCrossReference(org.apache.hive.service.cli.SessionHandle)
-   */ @throws[SparkThriftServerSQLException]
-  override def getCrossReference(sessionHandle: SessionHandle, primaryCatalog: String, primarySchema: String, primaryTable: String, foreignCatalog: String, foreignSchema: String, foreignTable: String): OperationHandle = {
-    val opHandle = sessionManager.getSession(sessionHandle).getCrossReference(primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema, foreignTable)
+  @throws[SparkThriftServerSQLException]
+  override def getCrossReference(sessionHandle: SessionHandle,
+                                 primaryCatalog: String,
+                                 primarySchema: String,
+                                 primaryTable: String,
+                                 foreignCatalog: String,
+                                 foreignSchema: String,
+                                 foreignTable: String): OperationHandle = {
+    val opHandle = sessionManager.getSession(sessionHandle)
+      .getCrossReference(primaryCatalog,
+        primarySchema,
+        primaryTable,
+        foreignCatalog,
+        foreignSchema,
+        foreignTable)
     logDebug(sessionHandle + ": getCrossReference()")
     opHandle
   }
@@ -409,7 +446,8 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   def getDelegationTokenFromMetaStore(owner: String): String = {
     if (!hiveConf.getBoolVar(HiveConf.ConfVars.METASTORE_USE_THRIFT_SASL) ||
       !hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
-      throw new UnsupportedOperationException("delegation token is can only be obtained for a secure remote metastore")
+      throw new UnsupportedOperationException("delegation token is can only " +
+        "be obtained for a secure remote metastore")
     }
     try {
       Hive.closeCurrent()
@@ -419,27 +457,37 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
         if (e.getCause.isInstanceOf[UnsupportedOperationException]) {
           throw e.getCause.asInstanceOf[UnsupportedOperationException]
         } else {
-          throw new SparkThriftServerSQLException("Error connect metastore to setup impersonation", e)
+          throw new SparkThriftServerSQLException("Error connect metastore to " +
+            "setup impersonation", e)
         }
     }
   }
 
 
   @throws[SparkThriftServerSQLException]
-  override def getDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, owner: String, renewer: String, remoteAddr: String): String = {
-    val delegationToken = sessionManager.getSession(sessionHandle).getDelegationToken(authFactory, owner, renewer, remoteAddr)
+  override def getDelegationToken(sessionHandle: SessionHandle,
+                                  authFactory: HiveAuthFactory,
+                                  owner: String,
+                                  renewer: String,
+                                  remoteAddr: String): String = {
+    val delegationToken = sessionManager.getSession(sessionHandle)
+      .getDelegationToken(authFactory, owner, renewer, remoteAddr)
     logInfo(sessionHandle + ": getDelegationToken()")
     delegationToken
   }
 
   @throws[SparkThriftServerSQLException]
-  override def cancelDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit = {
+  override def cancelDelegationToken(sessionHandle: SessionHandle,
+                                     authFactory: HiveAuthFactory,
+                                     tokenStr: String): Unit = {
     sessionManager.getSession(sessionHandle).cancelDelegationToken(authFactory, tokenStr)
     logInfo(sessionHandle + ": cancelDelegationToken()")
   }
 
   @throws[SparkThriftServerSQLException]
-  override def renewDelegationToken(sessionHandle: SessionHandle, authFactory: HiveAuthFactory, tokenStr: String): Unit = {
+  override def renewDelegationToken(sessionHandle: SessionHandle,
+                                    authFactory: HiveAuthFactory,
+                                    tokenStr: String): Unit = {
     sessionManager.getSession(sessionHandle).renewDelegationToken(authFactory, tokenStr)
     logInfo(sessionHandle + ": renewDelegationToken()")
   }

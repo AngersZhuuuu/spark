@@ -24,6 +24,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
@@ -101,7 +102,8 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
       FileSystem.closeAllForUGI(sessionUgi)
     catch {
       case ioe: IOException =>
-        throw new SparkThriftServerSQLException("Could not clean up file-system handles for UGI: " + sessionUgi, ioe)
+        throw new SparkThriftServerSQLException("Could not clean up file-system " +
+          "handles for UGI: " + sessionUgi, ioe)
     }
   }
 
