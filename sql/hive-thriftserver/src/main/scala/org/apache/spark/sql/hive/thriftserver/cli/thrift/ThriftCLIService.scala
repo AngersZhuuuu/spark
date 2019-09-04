@@ -21,17 +21,17 @@ import java.io.IOException
 import java.net.{InetAddress, UnknownHostException}
 import java.util
 import java.util.concurrent.TimeUnit
-
 import javax.security.auth.login.LoginException
 
 import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift._
 import org.apache.thrift.TException
 import org.apache.thrift.protocol.TProtocol
 import org.apache.thrift.server.{ServerContext, TServer, TServerEventHandler}
 import org.apache.thrift.transport.TTransport
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.ServiceException
 import org.apache.spark.service.cli.thrift._

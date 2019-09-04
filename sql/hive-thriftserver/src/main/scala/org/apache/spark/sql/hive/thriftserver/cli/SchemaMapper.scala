@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.{TTableSchema, TTypeId}
-import org.apache.spark.service.cli.thrift.TTableSchema
+import org.apache.spark.service.cli.thrift.{TTableSchema, TTypeId}
 import org.apache.spark.sql.types._
 
 object SchemaMapper {

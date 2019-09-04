@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.TColumnDesc
+import org.apache.spark.service.cli.thrift.TColumnDesc
 import org.apache.spark.sql.types.StructField
 
 /**

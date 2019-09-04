@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.TFetchOrientation
+import org.apache.spark.service.cli.thrift.TFetchOrientation
 
 trait FetchOrientation {
   def toTFetchOrientation: TFetchOrientation

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.{TPrimitiveTypeEntry, TTypeDesc, TTypeEntry}
-import org.apache.spark.service.cli.thrift.{TPrimitiveTypeEntry, TTypeDesc}
+import org.apache.spark.service.cli.thrift.{TPrimitiveTypeEntry, TTypeDesc, TTypeEntry}
 import org.apache.spark.sql.types.{DataType, DecimalType}
 
 /**

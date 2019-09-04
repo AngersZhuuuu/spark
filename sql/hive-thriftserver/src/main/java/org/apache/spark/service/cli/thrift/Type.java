@@ -22,7 +22,6 @@ import java.sql.DatabaseMetaData;
 import java.util.Locale;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
-import org.apache.hive.service.cli.thrift.TTypeId;
 
 /**
  * Type.
