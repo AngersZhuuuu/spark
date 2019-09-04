@@ -21,8 +21,7 @@ import java.io.File
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.session.SessionState
-
-import org.apache.spark.service.cli.thrift.TProtocolVersion
+import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.hive.thriftserver.cli.SessionHandle
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationManager
 

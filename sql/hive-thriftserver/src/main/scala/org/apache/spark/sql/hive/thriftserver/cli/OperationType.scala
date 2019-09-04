@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.spark.service.cli.thrift.TOperationType
+import org.apache.hive.service.cli.thrift.TOperationType
 
 
 /**

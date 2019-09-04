@@ -19,9 +19,10 @@ package org.apache.spark.sql.hive.thriftserver.server.cli
 
 import java.sql.SQLException
 
-import scala.collection.JavaConverters._
+import org.apache.hive.service.cli.thrift.{TStatus, TStatusCode}
 
-import org.apache.spark.service.cli.thrift.{TStatus, TStatusCode}
+import scala.collection.JavaConverters._
+import org.apache.spark.service.cli.thrift.TStatusCode
 
 class SparkThriftServerSQLException(reason: String,
                                     sqlState: String,

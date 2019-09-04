@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.hive.thriftserver.auth
 
+import org.apache.hive.service.cli.thrift.TCLIService
 import org.apache.thrift.TException
 import org.apache.thrift.protocol.TProtocol
 import org.apache.thrift.transport.{TSaslClientTransport, TSaslServerTransport, TSocket, TTransport}
-
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.cli.thrift.TCLIService
 import org.apache.spark.service.cli.thrift.TCLIService.Iface
 
 /**

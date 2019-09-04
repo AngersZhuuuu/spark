@@ -24,6 +24,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.Shell
+import org.apache.hive.service.cli.thrift.TCLIService
 import org.apache.thrift.TProcessor
 import org.apache.thrift.protocol.{TBinaryProtocol, TProtocolFactory}
 import org.apache.thrift.server.TServlet
@@ -31,8 +32,6 @@ import org.eclipse.jetty.server._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.ssl.SslContextFactory
 import org.eclipse.jetty.util.thread.{ExecutorThreadPool, ScheduledExecutorScheduler}
-
-import org.apache.spark.service.cli.thrift.TCLIService
 import org.apache.spark.service.server.ThreadFactoryWithGarbageCleanup
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.CLIService

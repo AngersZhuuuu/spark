@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.spark.service.cli.thrift.{TOperationHandle, TProtocolVersion}
+import org.apache.hive.service.cli.thrift.{TOperationHandle, TProtocolVersion}
+import org.apache.spark.service.cli.thrift.TProtocolVersion
 
 class OperationHandle private(val opType: OperationType,
                               protocol: TProtocolVersion,
