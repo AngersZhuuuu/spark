@@ -58,8 +58,7 @@ class ThriftHttpCLIService(cliService: CLIService)
           new ThreadFactoryWithGarbageCleanup(threadPoolName))
       val threadPool: ExecutorThreadPool = new ExecutorThreadPool(executorService)
       // HTTP Server
-      httpServer = new org.eclipse.jetty.server.Server()
-      httpServer.setThreadPool(threadPool)
+      httpServer = new org.eclipse.jetty.server.Server(threadPool)
       // Connector configs
       var connectionFactories: Array[ConnectionFactory] = null
       val useSsl: Boolean = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_USE_SSL)
@@ -78,7 +77,7 @@ class ThriftHttpCLIService(cliService: CLIService)
           throw new IllegalArgumentException(ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PATH.varname +
             " Not configured for SSL connection")
         }
-        val sslContextFactory: SslContextFactory = new SslContextFactory
+        val sslContextFactory: SslContextFactory = new SslContextFactory.Server
         val excludedProtocols: Array[String] =
           hiveConf.getVar(ConfVars.HIVE_SSL_PROTOCOL_BLACKLIST).split(",")
         logInfo("HTTP Server SSL: adding excluded protocols: " + excludedProtocols.mkString(","))
