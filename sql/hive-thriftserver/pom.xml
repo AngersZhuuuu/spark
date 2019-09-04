@@ -77,6 +77,10 @@
       <groupId>${hive.group}</groupId>
       <artifactId>hive-beeline</artifactId>
     </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-service</artifactId>
+    </dependency>
     <!-- Explicit listing hive-contrib and hive-hcatalog-core. Otherwise the maven test fails. -->
     <dependency>
       <groupId>${hive.group}</groupId>
