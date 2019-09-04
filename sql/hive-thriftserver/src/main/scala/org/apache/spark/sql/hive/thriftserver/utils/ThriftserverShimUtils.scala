@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.utils
 
-import org.apache.commons.logging.LogFactory
-import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.session.SessionState
+import org.slf4j.LoggerFactory
 
 import org.apache.spark.service.cli.thrift.TProtocolVersion._
 import org.apache.spark.service.cli.thrift.Type
+import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver
 import org.apache.spark.sql.hive.thriftserver.cli.{RowSet, RowSetFactory}
 import org.apache.spark.sql.types.StructType
 
@@ -41,9 +40,9 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] type TExecuteStatementReq =
     org.apache.spark.service.cli.thrift.TExecuteStatementReq
 
-  private[thriftserver] def getConsole: SessionState.LogHelper = {
-    val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
-    new SessionState.LogHelper(LOG)
+  private[thriftserver] def getConsole(isSilent: Boolean): LogHelper = {
+    val LOG = LoggerFactory.getLogger(classOf[SparkSQLCLIDriver])
+    new LogHelper(LOG, isSilent)
   }
 
   private[thriftserver] def resultRowSet(getResultSetSchema: StructType,
@@ -53,11 +52,6 @@ private[thriftserver] object ThriftserverShimUtils {
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
-  private[thriftserver] def addToClassPath(loader: ClassLoader,
-                                           auxJars: Array[String]): ClassLoader = {
-    Utilities.addToClassPath(loader, auxJars)
-  }
-
   private[thriftserver] val testedProtocolVersions = Seq(
     HIVE_CLI_SERVICE_PROTOCOL_V1,
     HIVE_CLI_SERVICE_PROTOCOL_V2,
@@ -66,5 +60,7 @@ private[thriftserver] object ThriftserverShimUtils {
     HIVE_CLI_SERVICE_PROTOCOL_V5,
     HIVE_CLI_SERVICE_PROTOCOL_V6,
     HIVE_CLI_SERVICE_PROTOCOL_V7,
-    HIVE_CLI_SERVICE_PROTOCOL_V8)
+    HIVE_CLI_SERVICE_PROTOCOL_V8,
+    HIVE_CLI_SERVICE_PROTOCOL_V9,
+    HIVE_CLI_SERVICE_PROTOCOL_V10)
 }
