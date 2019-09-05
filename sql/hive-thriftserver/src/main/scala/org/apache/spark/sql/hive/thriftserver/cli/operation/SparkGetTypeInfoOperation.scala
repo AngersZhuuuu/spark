@@ -92,7 +92,7 @@ private[hive] class SparkGetTypeInfoOperation(sqlContext: SQLContext,
       parentSession.getUsername)
 
     try {
-      Type.values().foreach(typeValue => {
+      Type.types.foreach(typeValue => {
         val rowData = Row(typeValue.getName, // TYPE_NAME
           typeValue.toJavaSQLType, // DATA_TYPE
           typeValue.getMaxPrecision, // PRECISION

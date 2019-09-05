@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver.utils
 import org.slf4j.LoggerFactory
 
 import org.apache.spark.service.cli.thrift.TProtocolVersion._
-import org.apache.spark.service.cli.thrift.Type
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver
 import org.apache.spark.sql.hive.thriftserver.cli.{RowSet, RowSetFactory}
 import org.apache.spark.sql.types.StructType
@@ -49,8 +48,6 @@ private[thriftserver] object ThriftserverShimUtils {
                                          getProtocolVersion: TProtocolVersion): RowSet = {
     RowSetFactory.create(getResultSetSchema, getProtocolVersion)
   }
-
-  private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
   private[thriftserver] val testedProtocolVersions = Seq(
     HIVE_CLI_SERVICE_PROTOCOL_V1,
