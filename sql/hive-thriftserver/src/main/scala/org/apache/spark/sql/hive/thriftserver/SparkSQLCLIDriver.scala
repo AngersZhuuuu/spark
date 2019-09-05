@@ -22,11 +22,12 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, Locale}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
-
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
+import org.slf4j.LoggerFactory
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
@@ -38,14 +39,16 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
 
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
-import org.apache.spark.sql.hive.thriftserver.utils.ThriftserverShimUtils
+import org.apache.spark.sql.hive.thriftserver.utils.LogHelper
 import org.apache.spark.util.ShutdownHookManager
+
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -299,7 +302,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val console = ThriftserverShimUtils.getConsole(false)
+  private val console =
+    new LogHelper(LoggerFactory.getLogger(classOf[SparkSQLCLIDriver]), false)
+
 
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)

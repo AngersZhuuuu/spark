@@ -34,7 +34,6 @@ import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
-import org.apache.spark.sql.hive.thriftserver.utils.ThriftserverShimUtils.toJavaSQLType
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
 
@@ -179,13 +178,13 @@ private[hive] class SparkGetColumnsOperation(sqlContext: SQLContext,
           dbName, // TABLE_SCHEM
           tableName, // TABLE_NAME
           column.name, // COLUMN_NAME
-          toJavaSQLType(column.dataType.sql).asInstanceOf[AnyRef], // DATA_TYPE
+          Type.getType(column.dataType.sql).getName, // DATA_TYPE
           column.dataType.sql, // TYPE_NAME
           null, // COLUMN_SIZE
           null, // BUFFER_LENGTH, unused
           null, // DECIMAL_DIGITS
           null, // NUM_PREC_RADIX
-          (if (column.nullable) 1 else 0).asInstanceOf[AnyRef], // NULLABLE
+          (if (column.nullable) 1 else 0), // NULLABLE
           column.getComment().getOrElse(""), // REMARKS
           null, // COLUMN_DEF
           null, // SQL_DATA_TYPE
