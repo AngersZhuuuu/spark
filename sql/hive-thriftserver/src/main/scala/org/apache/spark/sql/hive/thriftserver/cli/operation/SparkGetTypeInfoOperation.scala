@@ -22,7 +22,6 @@ import java.util.UUID
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.cli.thrift.Type
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.cli._
@@ -92,25 +91,26 @@ private[hive] class SparkGetTypeInfoOperation(sqlContext: SQLContext,
       parentSession.getUsername)
 
     try {
-      Type.types.foreach(typeValue => {
-        val rowData = Row(typeValue.getName, // TYPE_NAME
-          typeValue.toJavaSQLType, // DATA_TYPE
-          typeValue.getMaxPrecision, // PRECISION
-          typeValue.getLiteralPrefix, // LITERAL_PREFIX
-          typeValue.getLiteralSuffix, // LITERAL_SUFFIX
-          typeValue.getCreateParams, // CREATE_PARAMS
-          typeValue.getNullable, // NULLABLE
-          typeValue.isCaseSensitive, // CASE_SENSITIVE
-          typeValue.getSearchable, // SEARCHABLE
-          typeValue.isUnsignedAttribute, // UNSIGNED_ATTRIBUTE
-          typeValue.isFixedPrecScale, // FIXED_PREC_SCALE
-          typeValue.isAutoIncrement, // AUTO_INCREMENT
-          typeValue.getLocalizedName, // LOCAL_TYPE_NAME
-          typeValue.getMinimumScale, // MINIMUM_SCALE
-          typeValue.getMaximumScale, // MAXIMUM_SCALE
+      Type.types.foreach(typeInfo => {
+        val rowData = Row(
+          typeInfo.getName, // TYPE_NAME
+          typeInfo.toJavaSQLType, // DATA_TYPE
+          typeInfo.getMaxPrecision.getOrElse(null), // PRECISION
+          typeInfo.getLiteralPrefix, // LITERAL_PREFIX
+          typeInfo.getLiteralSuffix, // LITERAL_SUFFIX
+          typeInfo.getCreateParams, // CREATE_PARAMS
+          typeInfo.getNullable, // NULLABLE
+          typeInfo.isCaseSensitive, // CASE_SENSITIVE
+          typeInfo.getSearchable, // SEARCHABLE
+          typeInfo.isUnsignedAttribute, // UNSIGNED_ATTRIBUTE
+          typeInfo.isFixedPrecScale, // FIXED_PREC_SCALE
+          typeInfo.isAutoIncrement, // AUTO_INCREMENT
+          typeInfo.getLocalizedName, // LOCAL_TYPE_NAME
+          typeInfo.getMinimumScale, // MINIMUM_SCALE
+          typeInfo.getMaximumScale, // MAXIMUM_SCALE
           null, // SQL_DATA_TYPE, unused
           null, // SQL_DATETIME_SUB, unused
-          typeValue.getNumPrecRadix // NUM_PREC_RADIX
+          typeInfo.getNumPrecRadix // NUM_PREC_RADIX
         )
         rowSet.addRow(rowData)
       })
