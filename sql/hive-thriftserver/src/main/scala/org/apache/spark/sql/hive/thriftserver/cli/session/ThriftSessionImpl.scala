@@ -46,12 +46,12 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
                         serverHiveConf: HiveConf,
                         var _ipAddress: String) extends ThriftSession with Logging {
 
-  private var _sessionHandle: SessionHandle = new SessionHandle(_protocol)
-  private var _hiveConf: HiveConf = new HiveConf(serverHiveConf)
+  private val _sessionHandle: SessionHandle = new SessionHandle(_protocol)
+  private val _hiveConf: HiveConf = new HiveConf(serverHiveConf)
   private var _sessionState: SessionState = null
   private var _sessionManager: SessionManager = null
   private var _operationManager: OperationManager = new OperationManager()
-  private var _opHandleSet: util.Set[OperationHandle] = new util.HashSet[OperationHandle]()
+  private val _opHandleSet: util.Set[OperationHandle] = new util.HashSet[OperationHandle]()
   private var _isOperationLogEnabled: Boolean = false
   private var _sessionLogDir: File = null
   private var _lastAccessTime: Long = 0L
