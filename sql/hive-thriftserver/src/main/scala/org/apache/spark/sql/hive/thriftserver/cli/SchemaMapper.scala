@@ -46,9 +46,10 @@ object SchemaMapper {
     case DateType => TTypeId.DATE_TYPE
     case TimestampType => TTypeId.TIMESTAMP_TYPE
     case BinaryType => TTypeId.BINARY_TYPE
-    case _: ArrayType => TTypeId.ARRAY_TYPE
-    case _: MapType => TTypeId.MAP_TYPE
-    case _: StructType => TTypeId.STRUCT_TYPE
+    case _: ArrayType => TTypeId.STRING_TYPE
+    case _: MapType => TTypeId.STRING_TYPE
+    case _: StructType => TTypeId.STRING_TYPE
+    case _: UserDefinedType[_] => TTypeId.STRING_TYPE
     case other =>
       val catalogString = if (other != null) {
         other.catalogString

@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli.thrift
 
-import org.apache.log4j.{Layout, PatternLayout}
+import org.apache.log4j.PatternLayout
 
 object CLIServiceUtils {
+
   private val SEARCH_STRING_ESCAPE = '\\'
   val verboseLayout = new PatternLayout("%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n")
   val nonVerboseLayout = new PatternLayout("%-5p : %m%n")
