@@ -42,7 +42,6 @@ import org.apache.thrift.TProcessorFactory
 import org.apache.thrift.transport._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.auth.SaslQOP
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.ThriftCLIService
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
@@ -404,7 +403,7 @@ object HiveAuthFactory extends Logging {
       throw new IOException("HiveServer2 SPNEGO principal or keytab is not correctly configured")
     } else {
       UserGroupInformation.loginUserFromKeytabAndReturnUGI(
-          SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
+        SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)
     }
   }
 

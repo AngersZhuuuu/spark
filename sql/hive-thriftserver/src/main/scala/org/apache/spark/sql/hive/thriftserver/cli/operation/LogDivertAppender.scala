@@ -30,8 +30,7 @@ import org.apache.log4j.{PatternLayout, _}
 import org.apache.log4j.spi.{Filter, LoggingEvent}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.cli.thrift.CLIServiceUtils
-
+import org.apache.spark.sql.hive.thriftserver.cli.thrift.CLIServiceUtils
 
 class LogDivertAppender extends WriterAppender with Logging {
 

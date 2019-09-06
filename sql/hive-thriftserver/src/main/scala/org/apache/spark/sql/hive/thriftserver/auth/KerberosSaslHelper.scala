@@ -26,7 +26,6 @@ import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge
 import org.apache.thrift.{TProcessor, TProcessorFactory}
 import org.apache.thrift.transport.{TSaslClientTransport, TTransport}
 
-import org.apache.spark.service.auth.TSubjectAssumingTransport
 import org.apache.spark.service.cli.thrift.TCLIService
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.ThriftCLIService
 

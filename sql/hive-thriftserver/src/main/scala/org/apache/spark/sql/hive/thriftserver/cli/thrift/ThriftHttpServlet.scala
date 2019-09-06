@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver.cli.thrift
 
 import java.io.{IOException, UnsupportedEncodingException}
 import java.security.PrivilegedExceptionAction
-import java.util.Random
+import java.util
 import java.util.concurrent.TimeUnit
 import javax.servlet.ServletException
 import javax.servlet.http.{Cookie, HttpServletRequest, HttpServletResponse}
@@ -39,10 +39,8 @@ import org.apache.thrift.server.TServlet
 import org.ietf.jgss._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.auth.{AuthenticationProviderFactory, HttpAuthenticationException, PasswdAuthenticationProvider}
-import org.apache.spark.service.auth.AuthenticationProviderFactory.AuthMethods
 import org.apache.spark.sql.hive.thriftserver.CookieSigner
-import org.apache.spark.sql.hive.thriftserver.auth.{HttpAuthUtils, KERBEROS, NOSASL}
+import org.apache.spark.sql.hive.thriftserver.auth._
 import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
 
 class ThriftHttpServlet(processor: TProcessor,
@@ -55,7 +53,7 @@ class ThriftHttpServlet(processor: TProcessor,
   // Class members for cookie based authentication.
   private var signer: CookieSigner = null
   val AUTH_COOKIE = "hive.server2.auth"
-  private val RAN = new Random
+  private val RAN = new util.Random
   private val isCookieAuthEnabled: Boolean =
     hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_AUTH_ENABLED)
 
@@ -145,7 +143,7 @@ class ThriftHttpServlet(processor: TProcessor,
         }
         // scalastyle:off
         response.getWriter.println("Authentication Error: " + e.getMessage)
-        // scalastyle:on
+      // scalastyle:on
     } finally {
       // Clear the thread locals
       SessionManager.clearUserName
@@ -286,7 +284,7 @@ class ThriftHttpServlet(processor: TProcessor,
     // No-op when authType is NOSASL
     if (!authType.equalsIgnoreCase(NOSASL.toString)) {
       try {
-        val authMethod: AuthenticationProviderFactory.AuthMethods =
+        val authMethod: AuthMethods =
           AuthMethods.getValidAuthMethod(authType)
         val provider: PasswdAuthenticationProvider =
           AuthenticationProviderFactory.getAuthenticationProvider(authMethod)
@@ -475,13 +473,15 @@ class ThriftHttpServlet(processor: TProcessor,
 
   private def getDoAsQueryParam(queryString: String): String = {
     logDebug("URL query string:" + queryString)
-    if (queryString == null) return null
-    val params =
+    if (queryString == null) {
+      return null
+    }
+    val params: util.Hashtable[String, Array[String]] =
       javax.servlet.http.HttpUtils.parseQueryString(queryString)
-    val keySet: Set[String] = params.keySet.asScala.asInstanceOf[Set[String]]
+    val keySet: Seq[String] = params.keySet.asScala.toSeq
     keySet.foreach(key => {
       if (key.equalsIgnoreCase("doAs")) {
-        return params.get(key).asInstanceOf[Array[String]](0)
+        return params.get(key)(0)
       }
     })
     null

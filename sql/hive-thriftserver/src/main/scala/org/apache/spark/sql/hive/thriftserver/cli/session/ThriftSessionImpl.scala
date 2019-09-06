@@ -238,7 +238,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
         // Referring to SQLOperation.java, there is no chance that a
         // HiveSQLException throws and the asyn background operation
         // submits to thread pool successfully at the same time. So, Cleanup
-        // opHandle directly when got HiveSQLException
+        // opHandle directly when got SparkThriftServerSQLException
         operationManager.closeOperation(opHandle)
         throw e
     } finally {

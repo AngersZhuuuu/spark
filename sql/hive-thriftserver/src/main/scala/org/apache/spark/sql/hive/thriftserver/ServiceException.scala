@@ -18,19 +18,10 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-class ServiceException extends RuntimeException {
-  def this(cause: Throwable) {
-    this()
-    new RuntimeException(cause)
-  }
+class ServiceException(msg: String, cause: Throwable)
+  extends RuntimeException(msg, cause) {
 
-  def this(message: String) {
-    this()
-    new RuntimeException(message)
-  }
+  def this(cause: Throwable) = this(null, cause)
 
-  def this(message: String, cause: Throwable) {
-    this()
-    new RuntimeException(message, cause)
-  }
+  def this(message: String) = this(message, null)
 }

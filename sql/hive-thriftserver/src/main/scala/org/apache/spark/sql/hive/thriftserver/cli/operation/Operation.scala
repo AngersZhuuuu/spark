@@ -23,6 +23,7 @@ import java.util.concurrent.Future
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.hadoop.hive.ql.session.OperationLog
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.hive.thriftserver.cli._
@@ -31,9 +32,12 @@ import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLExc
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-abstract class Operation(session: ThriftSession, opType: OperationType, runInBackground: Boolean) extends Logging {
+abstract class Operation(session: ThriftSession,
+                         opType: OperationType,
+                         runInBackground: Boolean) extends Logging {
   private[this] var _state: OperationState = INITIALIZED
-  private[this] val _opHandle: OperationHandle = new OperationHandle(opType, session.getProtocolVersion)
+  private[this] val _opHandle: OperationHandle =
+    new OperationHandle(opType, session.getProtocolVersion)
   private[this] var _conf: HiveConf = session.getHiveConf
 
   protected var _hasResultSet = false
@@ -43,7 +47,8 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
   protected var _operationLog: OperationLog = _
   protected var _isOperationLogEnabled = false
 
-  private var _operationTimeout: Long = Utils.timeStringAsMs(_conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT))
+  private var _operationTimeout: Long =
+    Utils.timeStringAsMs(_conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT))
   private var _lastAccessTime = System.currentTimeMillis()
 
   protected val DEFAULT_FETCH_ORIENTATION_SET: Set[FetchOrientation] =
@@ -72,7 +77,7 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
 
   def getType: OperationType = _opHandle.getOperationType
 
-  def getStatus = new OperationStatus(_state, _operationException)
+  def getStatus: OperationStatus = new OperationStatus(_state, _operationException)
 
   def hasResultSet: Boolean = _hasResultSet
 
@@ -116,7 +121,10 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
 
   @throws[SparkThriftServerSQLException]
   protected final def assertState(state: OperationState): Unit = {
-    if (this._state ne state) throw new SparkThriftServerSQLException("Expected state " + state + ", but found " + this._state)
+    if (this._state ne state) {
+      throw new SparkThriftServerSQLException("Expected state " +
+        state + ", but found " + this._state)
+    }
     this._lastAccessTime = System.currentTimeMillis
   }
 
@@ -168,7 +176,8 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
         this._operationLog = new OperationLog(this._opHandle.toString, logFile, new HiveConf())
       catch {
         case e: FileNotFoundException =>
-          logWarning("Unable to instantiate OperationLog object for operation: " + this._opHandle, e)
+          logWarning("Unable to instantiate OperationLog object for operation: " +
+            this._opHandle, e)
           this._isOperationLogEnabled = false
           return
       }
@@ -180,8 +189,9 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
   }
 
   protected def unregisterOperationLog(): Unit = {
-    if (_isOperationLogEnabled)
+    if (_isOperationLogEnabled) {
       OperationLog.removeCurrentOperationLog()
+    }
   }
 
 
@@ -270,9 +280,14 @@ abstract class Operation(session: ThriftSession, opType: OperationType, runInBac
     }
   }
 
-  protected def toSQLException(prefix: String, response: CommandProcessorResponse): SparkThriftServerSQLException = {
-    val ex = new SparkThriftServerSQLException(prefix + ": " + response.getErrorMessage, response.getSQLState, response.getResponseCode)
-    if (response.getException != null) ex.initCause(response.getException)
+  protected def toSQLException(
+       prefix: String,
+       response: CommandProcessorResponse): SparkThriftServerSQLException = {
+    val ex = new SparkThriftServerSQLException(prefix + ": " +
+      response.getErrorMessage, response.getSQLState, response.getResponseCode)
+    if (response.getException != null) {
+      ex.initCause(response.getException)
+    }
     ex
   }
 }

@@ -27,8 +27,6 @@ import javax.security.sasl.{AuthenticationException, AuthorizeCallback, SaslExce
 import org.apache.thrift.{TProcessor, TProcessorFactory}
 import org.apache.thrift.transport.{TSaslClientTransport, TSaslServerTransport, TTransport, TTransportFactory}
 
-import org.apache.spark.service.auth.{AuthenticationProviderFactory, PlainSaslServer}
-import org.apache.spark.service.auth.AuthenticationProviderFactory.AuthMethods
 import org.apache.spark.service.cli.thrift.TCLIService.Iface
 import org.apache.spark.sql.hive.thriftserver.cli.thrift.ThriftCLIService
 

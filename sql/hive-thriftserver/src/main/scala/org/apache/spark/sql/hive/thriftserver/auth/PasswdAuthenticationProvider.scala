@@ -1,11 +1,10 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -15,12 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.service.auth;
 
-import javax.security.sasl.AuthenticationException;
+package org.apache.spark.sql.hive.thriftserver.auth
 
-public interface PasswdAuthenticationProvider {
+import javax.security.sasl.AuthenticationException
 
+trait PasswdAuthenticationProvider {
   /**
    * The Authenticate method is called by the HiveServer2 authentication layer
    * to authenticate users for their requests.
@@ -31,9 +30,9 @@ public interface PasswdAuthenticationProvider {
    *
    * @param user     The username received over the connection request
    * @param password The password received over the connection request
-   *
    * @throws AuthenticationException When a user is found to be
    *                                 invalid by the implementation
    */
-  void Authenticate(String user, String password) throws AuthenticationException;
+  @throws[AuthenticationException]
+  def Authenticate(user: String, password: String): Unit
 }

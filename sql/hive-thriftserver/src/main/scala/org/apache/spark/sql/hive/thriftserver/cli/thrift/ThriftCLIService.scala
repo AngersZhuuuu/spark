@@ -33,9 +33,8 @@ import org.apache.thrift.server.{ServerContext, TServer, TServerEventHandler}
 import org.apache.thrift.transport.TTransport
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.ServiceException
 import org.apache.spark.service.cli.thrift._
-import org.apache.spark.sql.hive.thriftserver.{AbstractService, ServiceUtils}
+import org.apache.spark.sql.hive.thriftserver.{AbstractService, ServiceException, ServiceUtils}
 import org.apache.spark.sql.hive.thriftserver.auth.{HiveAuthFactory, KERBEROS, NONE, TSetIpAddressProcessor}
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationStatus
@@ -376,10 +375,12 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
                                        res: TOpenSessionResp): SessionHandle = {
     val userName: String = getUserName(req)
     val ipAddress: String = getIpAddress
-    val protocol: TProtocolVersion = getMinVersion(CLIService.SERVER_VERSION, req.getClient_protocol)
+    val protocol: TProtocolVersion =
+      getMinVersion(CLIService.SERVER_VERSION, req.getClient_protocol)
     res.setServerProtocolVersion(protocol)
     var sessionHandle: SessionHandle = null
-    if (cliService.getHiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) && (userName != null)) {
+    if (cliService.getHiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
+      (userName != null)) {
       val delegationTokenStr: String = getDelegationToken(userName)
       sessionHandle = cliService.openSessionWithImpersonation(
         protocol,
@@ -439,7 +440,8 @@ abstract class ThriftCLIService(cliService: CLIService, serviceName: String)
       val sessionHandle: SessionHandle = new SessionHandle(req.getSessionHandle)
       cliService.closeSession(sessionHandle)
       resp.setStatus(OK_STATUS)
-      val context: ThriftCLIServerContext = currentServerContext.get.asInstanceOf[ThriftCLIServerContext]
+      val context: ThriftCLIServerContext =
+        currentServerContext.get.asInstanceOf[ThriftCLIServerContext]
       if (context != null) {
         context.setSessionHandle(null)
       }
