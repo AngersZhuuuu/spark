@@ -101,7 +101,7 @@ class ThriftBinaryCLIService(cliService: CLIService)
       server.serve()
     } catch {
       case t: Throwable =>
-        logError("Error starting HiveServer2: could not start " +
+        logError("Error starting SparkThriftServer: could not start " +
           classOf[ThriftBinaryCLIService].getSimpleName, t)
         System.exit(-1)
     }

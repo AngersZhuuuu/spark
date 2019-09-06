@@ -57,22 +57,6 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
   private var _lastAccessTime: Long = 0L
   private var _lastIdleTime: Long = 0L
 
-  try {
-    try {
-      // In non-impersonation mode, map scheduler queue to current user
-      // if fair scheduler is configured.
-      if (!_hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
-        _hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_MAP_FAIR_SCHEDULER_QUEUE)) {
-        ShimLoader.getHadoopShims.refreshDefaultQueue(_hiveConf, _username)
-      }
-    } catch {
-      case e: IOException =>
-        logWarning("Error setting scheduler queue: " + e, e)
-    }
-  } catch {
-    case e: Throwable => e.printStackTrace()
-  }
-
   @throws[SparkThriftServerSQLException]
   override def open(sessionConfMap: Map[String, String]): Unit = {
     _sessionState = new SessionState(_hiveConf, _username)

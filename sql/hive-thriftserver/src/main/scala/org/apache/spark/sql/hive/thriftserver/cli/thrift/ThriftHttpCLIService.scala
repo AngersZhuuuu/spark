@@ -138,7 +138,7 @@ class ThriftHttpCLIService(cliService: CLIService)
       httpServer.join()
     } catch {
       case t: Throwable =>
-        logError("Error starting HiveServer2: could not start " +
+        logError("Error starting SparkThriftServer: could not start " +
           classOf[ThriftHttpCLIService].getSimpleName, t)
         System.exit(-1)
     }

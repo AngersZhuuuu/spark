@@ -51,6 +51,8 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   private var sessionManager: SessionManager = null
   private var serviceUGI: UserGroupInformation = null
   private var httpUGI: UserGroupInformation = null
+  private var delegationTokenFetcher: DelegationTokenFetcher = null
+  private var delegationTokenFetchThread: Thread = null
 
   override def init(hiveConf: HiveConf): Unit = {
     this.hiveConf = hiveConf
@@ -93,33 +95,19 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
       }
     }
 
-    // creates connection to HMS and thus *must* occur after kerberos login above
-    try {
-      applyAuthorizationConfigPolicy(hiveConf)
-    } catch {
-      case e: Exception =>
-        throw new RuntimeException("Error applying authorization policy " +
-          "on hive configuration: " + e.getMessage, e)
-    }
-    setupBlockedUdfs()
+    delegationTokenFetcher = new DelegationTokenFetcher(new HiveConf())
+    delegationTokenFetchThread = new Thread(delegationTokenFetcher)
     super.init(hiveConf)
   }
 
-  @throws[HiveException]
-  @throws[MetaException]
-  private def applyAuthorizationConfigPolicy(newHiveConf: HiveConf): Unit = {
-    // authorization setup using SessionState should be revisited eventually, as
-    // authorization and authentication are not session specific settings
-    val ss = new SessionState(newHiveConf)
-    ss.setIsHiveServerQuery(true)
-    SessionState.start(ss)
-    ss.applyAuthorizationPolicy()
-  }
-
-  private def setupBlockedUdfs(): Unit = {
-    FunctionRegistry.setupPermissionsForBuiltinUDFs(
-      hiveConf.getVar(ConfVars.HIVE_SERVER2_BUILTIN_UDF_WHITELIST),
-      hiveConf.getVar(ConfVars.HIVE_SERVER2_BUILTIN_UDF_BLACKLIST))
+  override def start(): Unit = {
+    try {
+      delegationTokenFetchThread.start()
+    } catch {
+      case e: Exception =>
+        logError("Start DelegationTokenThread failed.", e)
+    }
+    super.start()
   }
 
   def getServiceUGI: UserGroupInformation = this.serviceUGI
@@ -449,8 +437,7 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
         "be obtained for a secure remote metastore")
     }
     try {
-      Hive.closeCurrent()
-      Hive.get(hiveConf).getDelegationToken(owner, owner)
+      delegationTokenFetcher.getDelegationToken(owner)
     } catch {
       case e: HiveException =>
         if (e.getCause.isInstanceOf[UnsupportedOperationException]) {
@@ -492,6 +479,25 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   }
 
   def getSessionManager: SessionManager = sessionManager
+
+  /**
+   * Fetch Hive DelegationToken in a new Thread, avoid conflict of Hive Object
+   * @param conf
+   */
+  class DelegationTokenFetcher(conf: HiveConf) extends Runnable {
+    private var hive: Hive = null
+    private var isStarted: Boolean = false
+
+    override def run(): Unit = {
+      Hive.closeCurrent()
+      hive = Hive.get(conf)
+      isStarted = true
+    }
+
+    def getDelegationToken(owner: String): String = {
+      hive.getDelegationToken(owner, owner)
+    }
+  }
 }
 
 object CLIService {

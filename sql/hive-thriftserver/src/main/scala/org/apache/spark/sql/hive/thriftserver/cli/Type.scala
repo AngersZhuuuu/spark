@@ -162,23 +162,26 @@ trait Type {
 
 object Type {
 
-  def types: Seq[Type] =
-    Seq(NULL,
-      STRING,
-      INTEGER,
-      BOOLEAN,
-      DOUBLE,
-      FLOAT,
-      DECIMAL,
-      LONG,
-      BYTE,
-      SHORT,
-      DATE,
-      TIMESTAMP,
-      BINARY)
+  val typeMap: Map[String, Type] = Map(
+    NULL.getName -> NULL,
+    STRING.getName -> STRING,
+    INT.getName -> INT,
+    BOOLEAN.getName -> BOOLEAN,
+    DOUBLE.getName -> DOUBLE,
+    FLOAT.getName -> FLOAT,
+    DECIMAL.getName -> DECIMAL,
+    LONG.getName -> LONG,
+    BYTE.getName -> BYTE,
+    SHORT.getName -> SHORT,
+    DATE.getName -> DATE,
+    TIMESTAMP.getName -> TIMESTAMP,
+    BINARY.getName -> BINARY
+  )
+
+  def values: Seq[Type] = typeMap.values.toSeq
 
   def getType(name: String): Type = {
-    val typeForName: Option[Type] = types.find(_.getName == name)
+    val typeForName: Option[Type] = values.find(_.getName == name)
     if (typeForName.isDefined) {
       typeForName.get
     } else {
@@ -220,8 +223,8 @@ object Type {
     override def isCaseSensitive: Boolean = true
   }
 
-  case object INTEGER extends Type {
-    override def getName: String = "INTEGER"
+  case object INT extends Type {
+    override def getName: String = "INT"
 
     override def isComplex: Boolean = false
 
