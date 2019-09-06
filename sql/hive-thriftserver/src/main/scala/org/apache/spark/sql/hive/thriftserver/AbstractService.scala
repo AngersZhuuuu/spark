@@ -24,8 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.{Service, ServiceStateChangeListener}
-import org.apache.spark.service.Service.STATE
+import org.apache.spark.sql.hive.thriftserver.Service._
 
 /**
  * Construct the service.
@@ -38,7 +37,7 @@ abstract class AbstractService(val name: String) extends Service with Logging {
   /**
    * Service state: initially {@link STATE#NOTINITED}.
    */
-  private var state = STATE.NOTINITED
+  private var state: STATE = NOTINITED
   /**
    * Service start time. Will be zero until the service is started.
    */
@@ -65,29 +64,29 @@ abstract class AbstractService(val name: String) extends Service with Logging {
    * this action
    */
   def init(hiveConf: HiveConf): Unit = {
-    ensureCurrentState(STATE.NOTINITED)
+    ensureCurrentState(NOTINITED)
     this.hiveConf = hiveConf
-    changeState(STATE.INITED)
+    changeState(INITED)
     logInfo("Service:" + getName + " is inited.")
   }
 
   def start(): Unit = {
     startTime = System.currentTimeMillis
-    ensureCurrentState(STATE.INITED)
-    changeState(STATE.STARTED)
+    ensureCurrentState(INITED)
+    changeState(STARTED)
     logInfo("Service:" + getName + " is started.")
   }
 
   def stop(): Unit = {
-    if ((state eq STATE.STOPPED) ||
-      (state eq STATE.INITED) ||
-      (state eq STATE.NOTINITED)) {
+    if ((state eq STOPPED) ||
+      (state eq INITED) ||
+      (state eq NOTINITED)) {
       // already stopped, or else it was never
       // started (eg another service failing canceled startup)
       return
     }
-    ensureCurrentState(STATE.STARTED)
-    changeState(STATE.STOPPED)
+    ensureCurrentState(STARTED)
+    changeState(STOPPED)
     logInfo("Service:" + getName + " is stopped.")
   }
 
@@ -114,7 +113,7 @@ abstract class AbstractService(val name: String) extends Service with Logging {
    * if the service state is different from
    * the desired state
    */
-  private def ensureCurrentState(currentState: Service.STATE): Unit = {
+  private def ensureCurrentState(currentState: STATE): Unit = {
     ServiceOperations.ensureCurrentState(state, currentState)
   }
 
@@ -128,7 +127,7 @@ abstract class AbstractService(val name: String) extends Service with Logging {
    * @param newState
    * new service state
    */
-  private def changeState(newState: Service.STATE): Unit = {
+  private def changeState(newState: STATE): Unit = {
     state = newState
     // notify listeners
     for (l <- listeners.asScala) {

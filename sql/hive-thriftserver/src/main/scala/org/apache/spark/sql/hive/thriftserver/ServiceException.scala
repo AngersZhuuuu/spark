@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,23 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.service;
+package org.apache.spark.sql.hive.thriftserver
 
-/**
- * ServiceException.
- *
- */
-public class ServiceException extends RuntimeException {
-
-  public ServiceException(Throwable cause) {
-    super(cause);
+class ServiceException extends RuntimeException {
+  def this(cause: Throwable) {
+    this()
+    new RuntimeException(cause)
   }
 
-  public ServiceException(String message) {
-    super(message);
-    }
+  def this(message: String) {
+    this()
+    new RuntimeException(message)
+  }
 
-  public ServiceException(String message, Throwable cause) {
-    super(message, cause);
+  def this(message: String, cause: Throwable) {
+    this()
+    new RuntimeException(message, cause)
   }
 }

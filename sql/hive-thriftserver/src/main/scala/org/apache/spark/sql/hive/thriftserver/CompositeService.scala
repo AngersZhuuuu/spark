@@ -25,9 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.{Service, ServiceException}
-import org.apache.spark.service.Service.STATE
-
+import org.apache.spark.sql.hive.thriftserver.Service.STOPPED
 
 class CompositeService(name: String) extends AbstractService(name) with Logging {
 
@@ -72,7 +70,7 @@ class CompositeService(name: String) extends AbstractService(name) with Logging 
   }
 
   override def stop(): Unit = {
-    if (this.getServiceState eq STATE.STOPPED) {
+    if (this.getServiceState eq STOPPED) {
       // The base composite-service is already stopped, don't do anything again.
       return
     }

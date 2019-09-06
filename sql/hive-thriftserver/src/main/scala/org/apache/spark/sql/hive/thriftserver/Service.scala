@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,33 +16,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.service;
+package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.conf.HiveConf
 
-/**
- * Service.
- *
- */
-public interface Service {
-
-  /**
-   * Service states
-   */
-  enum STATE {
-    /** Constructed but not initialized */
-    NOTINITED,
-
-    /** Initialized but not started or stopped */
-    INITED,
-
-    /** started and not stopped */
-    STARTED,
-
-    /** stopped. No further state transitions are permitted */
-    STOPPED
-  }
-
+trait Service {
   /**
    * Initialize the service.
    *
@@ -50,9 +28,9 @@ public interface Service {
    * operation failed and an exception was raised.
    *
    * @param conf
-   *          the configuration of the service
+   * the configuration of the service
    */
-  void init(HiveConf conf);
+  def init(conf: HiveConf): Unit
 
 
   /**
@@ -61,7 +39,7 @@ public interface Service {
    * The transition should be from {@link STATE#INITED} to {@link STATE#STARTED} unless the
    * operation failed and an exception was raised.
    */
-  void start();
+  def start(): Unit
 
   /**
    * Stop the service.
@@ -69,30 +47,30 @@ public interface Service {
    * This operation must be designed to complete regardless of the initial state
    * of the service, including the state of all its internal fields.
    */
-  void stop();
+  def stop(): Unit
 
   /**
    * Register an instance of the service state change events.
    *
    * @param listener
-   *          a new listener
+   * a new listener
    */
-  void register(ServiceStateChangeListener listener);
+  def register(listener: ServiceStateChangeListener): Unit
 
   /**
    * Unregister a previously instance of the service state change events.
    *
    * @param listener
-   *          the listener to unregister.
+   * the listener to unregister.
    */
-  void unregister(ServiceStateChangeListener listener);
+  def unregister(listener: ServiceStateChangeListener): Unit
 
   /**
    * Get the name of this service.
    *
    * @return the service name
    */
-  String getName();
+  def getName: String
 
   /**
    * Get the configuration of this service.
@@ -102,14 +80,14 @@ public interface Service {
    * @return the current configuration, unless a specific implementation chooses
    *         otherwise.
    */
-  HiveConf getHiveConf();
+  def getHiveConf: HiveConf
 
   /**
    * Get the current service state
    *
    * @return the state of the service
    */
-  STATE getServiceState();
+  def getServiceState: Service.STATE
 
   /**
    * Get the service start time
@@ -117,6 +95,19 @@ public interface Service {
    * @return the start time of the service. This will be zero if the service
    *         has not yet been started.
    */
-  long getStartTime();
+  def getStartTime: Long
+}
+
+object Service {
+
+  trait STATE
+
+  case object NOTINITED extends STATE
+
+  case object INITED extends STATE
+
+  case object STARTED extends STATE
+
+  case object STOPPED extends STATE
 
 }

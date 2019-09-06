@@ -19,7 +19,11 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.hive.conf.HiveConf
+
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
@@ -32,8 +36,7 @@ import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a

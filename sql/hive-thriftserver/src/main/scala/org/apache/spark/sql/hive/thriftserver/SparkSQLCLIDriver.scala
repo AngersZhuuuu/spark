@@ -22,12 +22,11 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, Locale}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
-import org.slf4j.LoggerFactory
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
@@ -38,7 +37,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
-
+import org.slf4j.LoggerFactory
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil

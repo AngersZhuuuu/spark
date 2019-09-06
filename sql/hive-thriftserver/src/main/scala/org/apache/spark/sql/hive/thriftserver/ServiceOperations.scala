@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.Service
+import org.apache.spark.sql.hive.thriftserver.Service.{INITED, NOTINITED, STARTED, STATE}
 
 object ServiceOperations extends Logging {
 
@@ -32,7 +32,7 @@ object ServiceOperations extends Logging {
    * @throws IllegalStateException if the service state is different from
    *                               the desired state
    */
-  def ensureCurrentState(state: Service.STATE, expectedState: Service.STATE): Unit = {
+  def ensureCurrentState(state: STATE, expectedState: STATE): Unit = {
     if (state ne expectedState) {
       throw new IllegalStateException("For this operation, the " +
         "current service state must be " + expectedState + " instead of " + state)
@@ -53,7 +53,7 @@ object ServiceOperations extends Logging {
    */
   def init(service: Service, configuration: HiveConf): Unit = {
     val state = service.getServiceState
-    ensureCurrentState(state, Service.STATE.NOTINITED)
+    ensureCurrentState(state, NOTINITED)
     service.init(configuration)
   }
 
@@ -70,7 +70,7 @@ object ServiceOperations extends Logging {
    */
   def start(service: Service): Unit = {
     val state = service.getServiceState
-    ensureCurrentState(state, Service.STATE.INITED)
+    ensureCurrentState(state, INITED)
     service.start()
   }
 
@@ -104,7 +104,7 @@ object ServiceOperations extends Logging {
   def stop(service: Service): Unit = {
     if (service != null) {
       val state = service.getServiceState
-      if (state eq Service.STATE.STARTED) {
+      if (state eq STARTED) {
         service.stop()
 
       }
