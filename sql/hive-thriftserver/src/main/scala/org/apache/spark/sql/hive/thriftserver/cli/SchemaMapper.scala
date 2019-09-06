@@ -50,7 +50,11 @@ object SchemaMapper {
     case _: MapType => TTypeId.MAP_TYPE
     case _: StructType => TTypeId.STRUCT_TYPE
     case other =>
-      val catalogString = if (other != null) other.catalogString else null
+      val catalogString = if (other != null) {
+        other.catalogString
+      } else {
+        null
+      }
       throw new IllegalArgumentException("Unrecognized type name: " + catalogString)
   }
 }

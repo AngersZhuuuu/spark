@@ -24,8 +24,6 @@ import org.apache.spark.service.cli.thrift.TProtocolVersion._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
 
-
-
 object RowSetFactory {
   def create(types: StructType, rows: Seq[Row], version: TProtocolVersion): RowSet = {
     if (version.getValue >= HIVE_CLI_SERVICE_PROTOCOL_V6.getValue) {
