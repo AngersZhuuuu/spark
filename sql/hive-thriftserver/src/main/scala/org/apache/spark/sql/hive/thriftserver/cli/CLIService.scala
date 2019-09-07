@@ -23,10 +23,7 @@ import javax.security.auth.login.LoginException
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.metastore.api.MetaException
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
-import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
-import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 
@@ -36,7 +33,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.thriftserver.{CompositeService, ServiceException}
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.operation.{Operation, OperationStatus}
-import org.apache.spark.sql.hive.thriftserver.cli.session.SessionManager
+import org.apache.spark.sql.hive.thriftserver.cli.session.{SessionManager, ThriftSession}
 import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.types.StructType
@@ -51,7 +48,7 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   private var sessionManager: SessionManager = null
   private var serviceUGI: UserGroupInformation = null
   private var httpUGI: UserGroupInformation = null
-  private var delegationTokenFetcher: DelegationTokenFetcher = null
+
   private var delegationTokenFetchThread: Thread = null
 
   override def init(hiveConf: HiveConf): Unit = {
@@ -95,7 +92,7 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
       }
     }
 
-    delegationTokenFetcher = new DelegationTokenFetcher(new HiveConf())
+    delegationTokenFetcher = new DelegationTokenHandler(new HiveConf())
     delegationTokenFetchThread = new Thread(delegationTokenFetcher)
     super.init(hiveConf)
   }
@@ -215,6 +212,7 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   }
 
   override def closeSession(sessionHandle: SessionHandle): Unit = {
+    val session: ThriftSession = sessionManager.getSession(sessionHandle)
     sessionManager.closeSession(sessionHandle)
     logDebug(sessionHandle + ": closeSession()")
   }
@@ -479,28 +477,10 @@ class CLIService(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
   }
 
   def getSessionManager: SessionManager = sessionManager
-
-  /**
-   * Fetch Hive DelegationToken in a new Thread, avoid conflict of Hive Object
-   * @param conf
-   */
-  class DelegationTokenFetcher(conf: HiveConf) extends Runnable {
-    private var hive: Hive = null
-    private var isStarted: Boolean = false
-
-    override def run(): Unit = {
-      Hive.closeCurrent()
-      hive = Hive.get(conf)
-      isStarted = true
-    }
-
-    def getDelegationToken(owner: String): String = {
-      hive.getDelegationToken(owner, owner)
-    }
-  }
 }
 
 object CLIService {
   val protocols: Array[TProtocolVersion] = TProtocolVersion.values()
   val SERVER_VERSION: TProtocolVersion = protocols(protocols.length - 1)
+  var delegationTokenFetcher: DelegationTokenHandler = null
 }

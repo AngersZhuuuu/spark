@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver.cli.thrift
 
 import java.util
-import java.util.concurrent.{ExecutorService, SynchronousQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent._
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -29,9 +29,9 @@ import org.apache.thrift.server.TThreadPoolServer
 import org.apache.thrift.transport.{TServerSocket, TTransportFactory}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.service.server.ThreadFactoryWithGarbageCleanup
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.CLIService
+import org.apache.spark.sql.hive.thriftserver.server.NamedThreadFactory
 
 
 class ThriftBinaryCLIService(cliService: CLIService)
@@ -47,7 +47,7 @@ class ThriftBinaryCLIService(cliService: CLIService)
           workerKeepAliveTime,
           TimeUnit.SECONDS,
           new SynchronousQueue[Runnable],
-          new ThreadFactoryWithGarbageCleanup(threadPoolName))
+          new NamedThreadFactory(threadPoolName))
       // Thrift configs
       hiveAuthFactory = new HiveAuthFactory(hiveConf)
       val transportFactory: TTransportFactory = hiveAuthFactory.getAuthTransFactory

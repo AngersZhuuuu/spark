@@ -33,9 +33,9 @@ import org.eclipse.jetty.util.ssl.SslContextFactory
 import org.eclipse.jetty.util.thread.{ExecutorThreadPool, ScheduledExecutorScheduler}
 
 import org.apache.spark.service.cli.thrift.TCLIService
-import org.apache.spark.service.server.ThreadFactoryWithGarbageCleanup
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli.CLIService
+import org.apache.spark.sql.hive.thriftserver.server.NamedThreadFactory
 
 
 class ThriftHttpCLIService(cliService: CLIService)
@@ -55,7 +55,7 @@ class ThriftHttpCLIService(cliService: CLIService)
           workerKeepAliveTime,
           TimeUnit.SECONDS,
           new SynchronousQueue[Runnable],
-          new ThreadFactoryWithGarbageCleanup(threadPoolName))
+          new NamedThreadFactory(threadPoolName))
       val threadPool: ExecutorThreadPool = new ExecutorThreadPool(executorService)
       // HTTP Server
       httpServer = new org.eclipse.jetty.server.Server(threadPool)

@@ -27,13 +27,12 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.TProtocolVersion
-import org.apache.spark.service.server.ThreadFactoryWithGarbageCleanup
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.{CompositeService, HiveThriftServer2}
 import org.apache.spark.sql.hive.thriftserver.cli.SessionHandle
 import org.apache.spark.sql.hive.thriftserver.cli.operation.OperationManager
-import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
+import org.apache.spark.sql.hive.thriftserver.server.{NamedThreadFactory, SparkThriftServer}
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 
 class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
@@ -84,7 +83,7 @@ class SessionManager(hiveServer2: SparkThriftServer, sqlContext: SQLContext)
         poolSize, keepAliveTime,
         TimeUnit.SECONDS,
         new LinkedBlockingQueue[Runnable](poolQueueSize),
-        new ThreadFactoryWithGarbageCleanup(threadPoolName))
+        new NamedThreadFactory(threadPoolName))
     backgroundOperationPool.allowCoreThreadTimeOut(true)
     checkInterval = HiveConf.getTimeVar(hiveConf,
       ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL, TimeUnit.MILLISECONDS)

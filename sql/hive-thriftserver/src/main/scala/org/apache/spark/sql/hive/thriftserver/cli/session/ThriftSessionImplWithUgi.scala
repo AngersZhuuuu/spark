@@ -28,6 +28,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.internal.Logging
 import org.apache.spark.service.cli.thrift.TProtocolVersion
 import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
+import org.apache.spark.sql.hive.thriftserver.cli.CLIService
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 
 class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
@@ -43,18 +44,12 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
 
   private var sessionUgi: UserGroupInformation = null
   private var proxySession: ThriftSession = null
-  private val sessionHive: Hive = {
+
+  try {
     setSessionUGI(username)
     setDelegationToken
-
-    // create a new metastore connection for this particular user session
-    Hive.set(null)
-    try {
-      Hive.get(getHiveConf)
-    } catch {
-      case e: HiveException =>
-        throw new SparkThriftServerSQLException("Failed to setup metastore connection", e)
-    }
+  } catch {
+    case e: Exception => e.printStackTrace()
   }
 
   // setup appropriate UGI for the session
@@ -81,10 +76,6 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
 
   override protected def acquire(userAccess: Boolean): Unit = {
     super.acquire(userAccess)
-    // if we have a metastore connection with impersonation, then set it first
-    if (sessionHive != null) {
-      Hive.set(sessionHive)
-    }
   }
 
   /**
@@ -95,7 +86,9 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
   override def close(): Unit = {
     try {
       acquire(true)
-      cancelDelegationToken()
+      if (delegationTokenStr != null) {
+        CLIService.delegationTokenFetcher.cancelDelegationToken(delegationTokenStr)
+      }
     } finally try
       super.close()
     finally try
@@ -125,21 +118,6 @@ class ThriftSessionImplWithUgi(protocol: TProtocolVersion,
         case e: IOException =>
           throw new SparkThriftServerSQLException("Couldn't setup delegation token in the ugi", e)
       }
-    }
-  }
-
-  // If the session has a delegation token obtained from the metastore, then cancel it
-  @throws[SparkThriftServerSQLException]
-  private def cancelDelegationToken(): Unit = {
-    if (delegationTokenStr != null) {
-      try
-        Hive.get(getHiveConf).cancelDelegationToken(delegationTokenStr)
-      catch {
-        case e: HiveException =>
-          throw new SparkThriftServerSQLException("Couldn't cancel delegation token", e)
-      }
-      // close the metastore connection created with this delegation token
-      Hive.closeCurrent()
     }
   }
 
