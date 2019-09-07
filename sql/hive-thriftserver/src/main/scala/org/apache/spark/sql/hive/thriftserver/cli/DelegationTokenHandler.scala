@@ -23,7 +23,10 @@ import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 
 /**
- * Fetch Hive DelegationToken in a new Thread, avoid conflict of Hive Object
+ * Fetch Hive DelegationToken in a new Thread, avoid conflict of Hive Object.
+ *
+ * Since SparkSQLEnv will start in main thread, avoid conflict, we start a Hive
+ * Token Handler in another thread.
  *
  * @param conf
  */
