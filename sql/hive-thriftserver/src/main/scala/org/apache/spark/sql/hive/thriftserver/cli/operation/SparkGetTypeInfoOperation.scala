@@ -91,7 +91,7 @@ private[hive] class SparkGetTypeInfoOperation(sqlContext: SQLContext,
       parentSession.getUsername)
 
     try {
-      Type.types.foreach(typeInfo => {
+      Type.values.foreach(typeInfo => {
         val rowData = Row(
           typeInfo.getName, // TYPE_NAME
           typeInfo.toJavaSQLType, // DATA_TYPE
