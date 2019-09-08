@@ -18,12 +18,16 @@
 package org.apache.spark.sql.hive.thriftserver.cli
 
 import java.sql.DatabaseMetaData
+import java.util.Locale
 
+import org.apache.spark.service.cli.thrift.TTypeId
 import org.apache.spark.sql.types.DecimalType
 
 trait Type {
 
   def getName: String
+
+  def tTypeId: TTypeId
 
   def isComplex: Boolean
 
@@ -175,26 +179,43 @@ object Type {
     SHORT.getName -> SHORT,
     DATE.getName -> DATE,
     TIMESTAMP.getName -> TIMESTAMP,
-    BINARY.getName -> BINARY
+    BINARY.getName -> BINARY,
+    ARRAY.getName -> ARRAY,
+    MAP.getName -> MAP,
+    STRUCT.getName -> STRUCT,
+    USER_DEFINED.getName -> USER_DEFINED
   )
 
   def values: Seq[Type] = typeMap.values.toSeq
 
-  def getType(name: String): Type = {
-    val typeForName: Option[Type] = values.find(_.getName == name)
-    if (typeForName.isDefined) {
-      typeForName.get
+  def getType(tTypeId: TTypeId): Type = {
+    val tType = values.find(_.tTypeId == tTypeId)
+    if (tType.isDefined) {
+      tType.get
     } else {
-      if (Array("ARRAY", "STRUCT", "MAP", "USERDEFINED").contains(name)) {
-        STRING
-      } else {
-        throw new IllegalArgumentException("Unrecognized type name: " + name)
-      }
+      throw new IllegalArgumentException("Unregonized Thrift TTypeId value: " + tTypeId)
     }
+
+  }
+
+  def getType(name: String): Type = {
+    values.foreach(t => {
+      if (t.getName == name) {
+        return t
+      } else {
+        if ((t.isQualifiedType || t.isComplex) &&
+          name.toUpperCase(Locale.ROOT).startsWith(t.getName)) {
+          return t
+        }
+      }
+    })
+    throw new IllegalArgumentException("Unrecognized type name: " + name)
   }
 
   case object NULL extends Type() {
     override def getName: String = "VOID"
+
+    override def tTypeId: TTypeId = TTypeId.NULL_TYPE
 
     override def isComplex: Boolean = false
 
@@ -209,6 +230,8 @@ object Type {
 
   case object STRING extends Type {
     override def getName: String = "STRING"
+
+    override def tTypeId: TTypeId = TTypeId.STRING_TYPE
 
     override def isComplex: Boolean = false
 
@@ -226,6 +249,8 @@ object Type {
   case object INT extends Type {
     override def getName: String = "INT"
 
+    override def tTypeId: TTypeId = TTypeId.INT_TYPE
+
     override def isComplex: Boolean = false
 
     override def isQualifiedType: Boolean = false
@@ -242,6 +267,8 @@ object Type {
   case object BOOLEAN extends Type {
     override def getName: String = "BOOLEAN"
 
+    override def tTypeId: TTypeId = TTypeId.BOOLEAN_TYPE
+
     override def isComplex: Boolean = false
 
     override def isQualifiedType: Boolean = false
@@ -255,6 +282,8 @@ object Type {
 
   case object DOUBLE extends Type {
     override def getName: String = "DOUBLE"
+
+    override def tTypeId: TTypeId = TTypeId.DOUBLE_TYPE
 
     override def isComplex: Boolean = false
 
@@ -272,6 +301,8 @@ object Type {
   case object FLOAT extends Type {
     override def getName: String = "FLOAT"
 
+    override def tTypeId: TTypeId = TTypeId.FLOAT_TYPE
+
     override def isComplex: Boolean = false
 
     override def isQualifiedType: Boolean = false
@@ -288,6 +319,8 @@ object Type {
   case object DECIMAL extends Type {
     override def getName: String = "DECIMAL"
 
+    override def tTypeId: TTypeId = TTypeId.DECIMAL_TYPE
+
     override def isComplex: Boolean = false
 
     override def isQualifiedType: Boolean = true
@@ -302,7 +335,9 @@ object Type {
   }
 
   case object LONG extends Type {
-    override def getName: String = "LONG"
+    override def getName: String = "BIGINT"
+
+    override def tTypeId: TTypeId = TTypeId.BIGINT_TYPE
 
     override def isComplex: Boolean = false
 
@@ -318,7 +353,9 @@ object Type {
   }
 
   case object BYTE extends Type {
-    override def getName: String = "BYTE"
+    override def getName: String = "TINYINT"
+
+    override def tTypeId: TTypeId = TTypeId.TINYINT_TYPE
 
     override def isComplex: Boolean = false
 
@@ -332,7 +369,9 @@ object Type {
   }
 
   case object SHORT extends Type {
-    override def getName: String = "SHORT"
+    override def getName: String = "SMALLINT"
+
+    override def tTypeId: TTypeId = TTypeId.SMALLINT_TYPE
 
     override def isComplex: Boolean = false
 
@@ -350,6 +389,8 @@ object Type {
   case object DATE extends Type {
     override def getName: String = "DATE"
 
+    override def tTypeId: TTypeId = TTypeId.DATE_TYPE
+
     override def isComplex: Boolean = false
 
     override def isQualifiedType: Boolean = false
@@ -363,6 +404,8 @@ object Type {
 
   case object TIMESTAMP extends Type {
     override def getName: String = "TIMESTAMP"
+
+    override def tTypeId: TTypeId = TTypeId.TIMESTAMP_TYPE
 
     override def isComplex: Boolean = false
 
@@ -378,6 +421,8 @@ object Type {
   case object BINARY extends Type {
     override def getName: String = "BINARY"
 
+    override def tTypeId: TTypeId = TTypeId.BINARY_TYPE
+
     override def isComplex: Boolean = false
 
     override def isQualifiedType: Boolean = false
@@ -391,6 +436,8 @@ object Type {
 
   case object ARRAY extends Type {
     override def getName: String = "ARRAY"
+
+    override def tTypeId: TTypeId = TTypeId.ARRAY_TYPE
 
     override def isComplex: Boolean = true
 
@@ -406,6 +453,8 @@ object Type {
   case object MAP extends Type {
     override def getName: String = "MAP"
 
+    override def tTypeId: TTypeId = TTypeId.MAP_TYPE
+
     override def isComplex: Boolean = true
 
     override def isQualifiedType: Boolean = false
@@ -420,6 +469,8 @@ object Type {
   case object STRUCT extends Type {
     override def getName: String = "STRUCT"
 
+    override def tTypeId: TTypeId = TTypeId.STRUCT_TYPE
+
     override def isComplex: Boolean = true
 
     override def isQualifiedType: Boolean = false
@@ -433,6 +484,8 @@ object Type {
 
   case object USER_DEFINED extends Type {
     override def getName: String = "USER_DEFINED"
+
+    override def tTypeId: TTypeId = TTypeId.USER_DEFINED_TYPE
 
     override def isComplex: Boolean = true
 
