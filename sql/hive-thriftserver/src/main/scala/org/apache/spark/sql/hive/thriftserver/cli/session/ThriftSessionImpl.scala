@@ -18,8 +18,8 @@
 package org.apache.spark.sql.hive.thriftserver.cli.session
 
 import java.io._
-import java.util
 
+import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.commons.io.FileUtils
@@ -34,6 +34,7 @@ import org.apache.spark.sql.hive.thriftserver.auth.HiveAuthFactory
 import org.apache.spark.sql.hive.thriftserver.cli._
 import org.apache.spark.sql.hive.thriftserver.cli.operation.{Operation, OperationManager}
 import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
+import org.apache.spark.sql.hive.thriftserver.utils.VariableSubstitution
 import org.apache.spark.sql.types.StructType
 
 
@@ -97,23 +98,24 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
     if (value.contains("\n")) {
       logError("Warning: Value had a \\n character in it.")
     }
+    val substitution = new VariableSubstitution(ss.getHiveVariables)
     varname = varname.trim
     if (varname.startsWith(ENV_PREFIX)) {
       logError("env:* variables can not be set.")
       return 1
     } else if (varname.startsWith(SYSTEM_PREFIX)) {
       val propName = varname.substring(SYSTEM_PREFIX.length)
-      System.getProperties.setProperty(propName, value)
+      System.getProperties.setProperty(propName, substitution.substitute(ss.getConf, value))
     } else if (varname.startsWith(HIVECONF_PREFIX)) {
       val propName = varname.substring(HIVECONF_PREFIX.length)
       setConf(varname, propName, value, true)
     } else if (varname.startsWith(HIVEVAR_PREFIX)) {
       val propName = varname.substring(HIVEVAR_PREFIX.length)
-      ss.getHiveVariables.put(propName, value)
+      ss.getHiveVariables.put(propName, substitution.substitute(ss.getConf, value))
     } else if (varname.startsWith(METACONF_PREFIX)) {
       val propName = varname.substring(METACONF_PREFIX.length)
       val hive = Hive.get(ss.getConf)
-      hive.setMetaConf(propName, value)
+      hive.setMetaConf(propName, substitution.substitute(ss.getConf, value))
     } else {
       setConf(varname, varname, value, true)
     }
@@ -123,8 +125,9 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
   // returns non-null string for validation fail
   @throws[IllegalArgumentException]
   private def setConf(varname: String, key: String, varvalue: String, register: Boolean): Unit = {
+    val substitution = new VariableSubstitution(SessionState.get.getHiveVariables)
     val conf = SessionState.get.getConf
-    val value = varvalue
+    val value = substitution.substitute(conf, varvalue)
     if (conf.getBoolVar(HiveConf.ConfVars.HIVECONFVALIDATION)) {
       val confVars = HiveConf.getConfVars(key)
       if (confVars != null) {
@@ -320,8 +323,8 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
                          tableTypes: List[String]): OperationHandle = {
     acquire(true)
     val operationManager = getOperationManager
-    val operation = operationManager
-      .newGetTablesOperation(
+    val operation =
+      operationManager.newGetTablesOperation(
         getSession,
         catalogName,
         schemaName,
