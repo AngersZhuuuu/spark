@@ -194,7 +194,7 @@ object Type {
   }
 
   case object NULL extends Type() {
-    override def getName: String = "NULL"
+    override def getName: String = "VOID"
 
     override def isComplex: Boolean = false
 
@@ -387,6 +387,62 @@ object Type {
     override def getMaxPrecision(): Option[Int] = None
 
     override def javaSQLType: Int = java.sql.Types.BINARY
+  }
+
+  case object ARRAY extends Type {
+    override def getName: String = "ARRAY"
+
+    override def isComplex: Boolean = true
+
+    override def isQualifiedType: Boolean = false
+
+    override def isCollectionType: Boolean = true
+
+    override def getMaxPrecision(): Option[Int] = None
+
+    override def javaSQLType: Int = java.sql.Types.ARRAY
+  }
+
+  case object MAP extends Type {
+    override def getName: String = "MAP"
+
+    override def isComplex: Boolean = true
+
+    override def isQualifiedType: Boolean = false
+
+    override def isCollectionType: Boolean = true
+
+    override def getMaxPrecision(): Option[Int] = None
+
+    override def javaSQLType: Int = java.sql.Types.JAVA_OBJECT
+  }
+
+  case object STRUCT extends Type {
+    override def getName: String = "STRUCT"
+
+    override def isComplex: Boolean = true
+
+    override def isQualifiedType: Boolean = false
+
+    override def isCollectionType: Boolean = false
+
+    override def getMaxPrecision(): Option[Int] = None
+
+    override def javaSQLType: Int = java.sql.Types.STRUCT
+  }
+
+  case object USER_DEFINED extends Type {
+    override def getName: String = "USER_DEFINED"
+
+    override def isComplex: Boolean = true
+
+    override def isQualifiedType: Boolean = false
+
+    override def isCollectionType: Boolean = false
+
+    override def getMaxPrecision(): Option[Int] = None
+
+    override def javaSQLType: Int = java.sql.Types.OTHER
   }
 
 }
