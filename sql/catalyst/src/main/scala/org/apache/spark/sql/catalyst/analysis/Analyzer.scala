@@ -958,9 +958,7 @@ class Analyzer(
         }
       // If the script transformation input contains Stars, expand it.
       case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(
-          input = t.child.output
-        )
+        t.copy(input = t.child.output)
       case g: Generate if containsStar(g.generator.children) =>
         failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
