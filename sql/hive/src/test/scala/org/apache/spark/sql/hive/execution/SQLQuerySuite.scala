@@ -1119,6 +1119,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |) t
           |SELECT (thing2 + 1) as result
         """.stripMargin).sort("result"), Array(7, 10).map(i => Row(i)))
+
+    checkAnswer(
+      sql(
+        """
+          |MAP k / 10 USING 'cat' AS (one) from (select 10 as k)
+        """.stripMargin
+      ), Row(1.0))
+
+    checkAnswer(
+      sql(
+        """
+          |FROM (select 1 as key, 100 as value) src
+          |MAP src.*, src.key, CAST(src.key / 10 AS INT), CAST(src.key % 10 AS INT), src.value
+          |USING 'cat' AS (k, v, tkey, ten, one, tvalue)
+        """.stripMargin), Row(1, 100, 1, 0, 1, 100))
   }
 
 

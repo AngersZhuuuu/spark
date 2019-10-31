@@ -511,9 +511,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         AttributeReference("value", StringType)()), true)
     }
 
-    val namedExpressions = expressions.map {
-      case e: NamedExpression => e
-      case e: Expression => UnresolvedAlias(e)
+    val aliasFunc = (position: Int, e: Expression) => s"gen_alias_${position}"
+
+    val namedExpressions = expressions.zipWithIndex.map {
+      case (e: NamedExpression, _) => e
+      case (e: Expression, index) => UnresolvedAlias(e, Some(aliasFunc(index, _)))
     }
 
     def createProject() = if (namedExpressions.nonEmpty) {
