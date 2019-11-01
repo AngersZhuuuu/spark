@@ -511,11 +511,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         AttributeReference("value", StringType)()), true)
     }
 
-    val aliasFunc = (position: Int, e: Expression) => s"gen_alias_${position}"
-
     val namedExpressions = expressions.zipWithIndex.map {
       case (e: NamedExpression, _) => e
-      case (e: Expression, index) => UnresolvedAlias(e, Some(aliasFunc(index, _)))
+      case (e: Expression, index) => UnresolvedAlias(e)
     }
 
     def createProject() = if (namedExpressions.nonEmpty) {
@@ -540,41 +538,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       createProject()
     }
 
-
-    def assignAliases(exprs: UnresolvedAlias): Expression = {
-      exprs.child match {
-        case ne: NamedExpression => UnresolvedAttribute(ne.name)
-        case c@Cast(ne: NamedExpression, _, _) => UnresolvedAttribute(ne.name)
-        case e if exprs.aliasFunc.isDefined =>
-          UnresolvedAttribute(exprs.aliasFunc.get.apply(e))
-        case e => UnresolvedAttribute(toPrettySQL(e))
-      }
-    }
-
-    val childOutput = withProject match {
-      case f: Filter =>
-        f.child match {
-          case r: UnresolvedRelation => expressions
-          case agg: Aggregate => agg.aggregateExpressions
-          case project: Project => project.projectList
-          // actually it won't happen
-          case _ => throw new ParseException("Script Transform meet a parser error", ctx)
-        }
-      case p: Project => p.projectList
-      case a: Aggregate => a.aggregateExpressions
-    }
-
-
-    // Get ScripTransformation's child's output cols
-    val input = childOutput.map {
-      case a: Alias => UnresolvedAttribute(a.name)
-      case e: UnresolvedAlias => assignAliases(e)
-      case e: Expression => e
-    }
-
     // Create the transform.
     ScriptTransformation(
-      input,
+      Seq(UnresolvedStar(None)),
       string(transformClause.script),
       attributes,
       withProject,
