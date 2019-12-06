@@ -27,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
@@ -270,6 +271,12 @@ private[hive] class SparkExecuteStatementOperation(
           setState(OperationState.RUNNING)
         }
       }
+      // Always set current username to local properties
+      if (parentSession.getHiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
+        sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_PROXY_ENABLED, "true")
+        sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_PROXY_USER,
+          parentSession.getUserName)
+      }
       // Always use the latest class loader provided by executionHive's state.
       val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -326,6 +333,10 @@ private[hive] class SparkExecuteStatementOperation(
           }
         }
     } finally {
+      if (parentSession.getHiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
+        sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_PROXY_ENABLED, "")
+        sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_PROXY_USER, "")
+      }
       synchronized {
         if (!getStatus.getState.isTerminal) {
           setState(OperationState.FINISHED)

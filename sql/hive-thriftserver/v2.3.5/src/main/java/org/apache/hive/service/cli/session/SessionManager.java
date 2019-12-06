@@ -50,17 +50,17 @@ public class SessionManager extends CompositeService {
 
   private static final Logger LOG = LoggerFactory.getLogger(SessionManager.class);
   public static final String HIVERCFILE = ".hiverc";
-  private HiveConf hiveConf;
-  private final Map<SessionHandle, HiveSession> handleToSession =
+  protected HiveConf hiveConf;
+  protected final Map<SessionHandle, HiveSession> handleToSession =
       new ConcurrentHashMap<SessionHandle, HiveSession>();
-  private final OperationManager operationManager = new OperationManager();
-  private ThreadPoolExecutor backgroundOperationPool;
-  private boolean isOperationLogEnabled;
-  private File operationLogRootDir;
+  protected final OperationManager operationManager = new OperationManager();
+  protected ThreadPoolExecutor backgroundOperationPool;
+  protected boolean isOperationLogEnabled;
+  protected File operationLogRootDir;
 
-  private long checkInterval;
-  private long sessionTimeout;
-  private boolean checkOperation;
+  protected long checkInterval;
+  protected long sessionTimeout;
+  protected boolean checkOperation;
 
   private volatile boolean shutdown;
   // The HiveServer2 instance running this service

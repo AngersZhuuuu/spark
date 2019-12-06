@@ -22,10 +22,13 @@ import java.util.concurrent.Executors
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.SessionHandle
-import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
+import org.apache.hive.service.cli.session._
 import org.apache.hive.service.server.HiveServer2
 
+import org.apache.spark.deploy.security.ProxyPlugin
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
@@ -34,9 +37,11 @@ import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends SessionManager(hiveServer)
-  with ReflectedCompositeService {
+  with ReflectedCompositeService with Logging{
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
+  private val proxyPlugin = new ProxyPlugin(sqlContext.sparkContext.conf,
+    sqlContext.sparkContext.hadoopConfiguration)
 
   override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
@@ -51,17 +56,56 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       sessionConf: java.util.Map[String, String],
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
-    val sessionHandle =
-      super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
+    var session: HiveSession = null
+    var sessionUGI: UserGroupInformation = null
+    if (withImpersonation) {
+      val sessionWithUGI =
+        new HiveSessionImplwithUGI(
+          protocol,
+          username,
+          passwd,
+          hiveConf,
+          ipAddress,
           delegationToken)
-    val session = super.getSession(sessionHandle)
-    HiveThriftServer2.listener.onSessionCreated(
-      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+      if (UserGroupInformation.isSecurityEnabled) {
+        val ugi = sessionWithUGI.getSessionUgi
+        proxyPlugin.obtainTokenForProxyUGI(
+          sessionWithUGI.getSessionHandle.getSessionId, ugi)
+      }
+      session = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)
+      sessionWithUGI.setProxySession(session)
+      sessionUGI = sessionWithUGI.getSessionUgi
+    } else {
+      session = new HiveSessionImpl(protocol, username, passwd, hiveConf, ipAddress)
+      sessionUGI = UserGroupInformation.getLoginUser
+    }
+    session.setSessionManager(this)
+    session.setOperationManager(operationManager)
+    try
+      session.open(sessionConf)
+    catch {
+      case e: Exception =>
+        try
+          session.close()
+        catch {
+          case t: Throwable =>
+            logWarning("Error closing session", t)
+        }
+        session = null
+        throw new HiveSQLException("Failed to open new session: " + e, e)
+    }
+    if (isOperationLogEnabled) {
+      session.setOperationLogSessionDir(operationLogRootDir)
+    }
+    handleToSession.put(session.getSessionHandle, session)
     val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
       sqlContext
     } else {
       sqlContext.newSession()
     }
+    val sessionHandle = session.getSessionHandle
+    HiveThriftServer2.listener.onSessionCreated(
+      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
     ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
     val hiveSessionState = session.getSessionState
     setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
@@ -78,6 +122,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     val ctx = sparkSqlOperationManager.sessionToContexts.getOrDefault(sessionHandle, sqlContext)
     ctx.sparkSession.sessionState.catalog.getTempViewNames().foreach(ctx.uncacheTable)
     super.closeSession(sessionHandle)
+    proxyPlugin.removeProxyUGI(sessionHandle.getSessionId)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
   }

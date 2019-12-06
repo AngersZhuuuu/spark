@@ -35,6 +35,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.ProxyPlugin
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
@@ -141,6 +142,9 @@ private[spark] class Executor(
   private val plugins: Option[PluginContainer] = Utils.withContextClassLoader(replClassLoader) {
     PluginContainer(env)
   }
+
+  private val proxyPlugin: ProxyPlugin =
+    new ProxyPlugin(conf, SparkHadoopUtil.get.newConfiguration(conf))
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
@@ -267,6 +271,8 @@ private[spark] class Executor(
     // Notify plugins that executor is shutting down so they can terminate cleanly
     Utils.withContextClassLoader(replClassLoader) {
       plugins.foreach(_.shutdown())
+
+      proxyPlugin.stop()
     }
     if (!isLocal) {
       env.stop()
@@ -360,6 +366,23 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+      taskDescription.properties
+        .getProperty(SparkContext.SPARK_JOB_PROXY_ENABLED) match {
+        case "true" =>
+          val proxyUser = taskDescription.properties.getProperty(SparkContext.SPARK_JOB_PROXY_USER)
+          if (proxyUser == null) {
+            runWithProxy()
+          } else {
+            proxyPlugin.proxy(proxyUser) {
+              runWithProxy()
+            }
+          }
+        case _ =>
+          runWithProxy()
+      }
+    }
+
+    def runWithProxy(): Unit = {
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
