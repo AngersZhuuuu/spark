@@ -36,7 +36,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 class ProxyPlugin(sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
 
-  private val currentUGI = UserGroupInformation.getCurrentUser
+  private val currentUGI = UserGroupInformation.getCurrentUser.getRealUser
   private val userTokenMap = new ConcurrentHashMap[String, UserGroupInformation]()
   private val sessionToUGI = new ConcurrentHashMap[UUID, UserGroupInformation]()
 
@@ -58,7 +58,7 @@ class ProxyPlugin(sparkConf: SparkConf, hadoopConf: Configuration) extends Loggi
   logDebug("Using the following builtin delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
-  private var renewalExecutor: ScheduledExecutorService =
+  private val renewalExecutor: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
 
   private val tgtRenewalPeriod = sparkConf.get(KERBEROS_RELOGIN_PERIOD)
@@ -141,8 +141,12 @@ class ProxyPlugin(sparkConf: SparkConf, hadoopConf: Configuration) extends Loggi
    */
   private def updateTokensTask(ugi: UserGroupInformation): Unit = {
     try {
+      val originalCreds = ugi.getCredentials
       val creds = obtainTokensAndScheduleRenewal(ugi)
       ugi.addCredentials(creds)
+      val existing = ugi.getCredentials()
+      existing.mergeAll(originalCreds)
+      ugi.addCredentials(existing)
     } catch {
       case _: InterruptedException =>
       // Ignore, may happen if shutting down.
@@ -184,7 +188,7 @@ class ProxyPlugin(sparkConf: SparkConf, hadoopConf: Configuration) extends Loggi
     val iterator = loader.iterator
     while (iterator.hasNext) {
       try {
-        providers += iterator.next
+        providers += iterator.next()
       } catch {
         case t: Throwable =>
           logDebug(s"Failed to load built in provider.", t)

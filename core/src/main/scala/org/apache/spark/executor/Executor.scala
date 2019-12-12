@@ -370,7 +370,8 @@ private[spark] class Executor(
         .getProperty(SparkContext.SPARK_JOB_PROXY_ENABLED) match {
         case "true" =>
           val proxyUser = taskDescription.properties.getProperty(SparkContext.SPARK_JOB_PROXY_USER)
-          if (proxyUser == null) {
+          logInfo(s"PROXY TEXT USER = ${proxyUser}")
+          if (proxyUser == "" || proxyUser == null) {
             runWithProxy()
           } else {
             proxyPlugin.proxy(proxyUser) {
