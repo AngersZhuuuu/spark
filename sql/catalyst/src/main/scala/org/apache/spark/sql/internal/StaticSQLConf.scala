@@ -18,7 +18,9 @@
 package org.apache.spark.sql.internal
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
+import org.apache.spark.sql.internal.SQLConf.buildConf
 import org.apache.spark.util.Utils
 
 
@@ -176,4 +178,18 @@ object StaticSQLConf {
       .internal()
       .booleanConf
       .createWithDefault(true)
+
+  val JOB_MONITOR_TIMEOUT =
+    buildConf("spark.sql.cli.job.monitor.interval")
+      .internal()
+      .doc("Timeout for job monitor to get Spark job state.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(60 * 1000)
+
+  val JOB_MONITOR_CHECK_INTERVAL =
+    buildConf("spark.sql.cli.job.monitor.checkInterval")
+      .internal()
+      .doc("CHeck Interval for job monitor to get Spark job state.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(1000)
 }
