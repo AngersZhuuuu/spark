@@ -53,7 +53,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
     jobStatus = CLISQLStatus.INITING
     eventNotifier = new EventNotifier()
     if (SessionState.get().getIsVerbose) {
-      inPlaceUpdateStream = new CLIInPlaceUpdateStream(SessionState.get().out, eventNotifier)
+      inPlaceUpdateStream = new CLIInPlaceUpdateStream(SessionState.get().err, eventNotifier)
       monitorThread = Some(new Thread(new SparkSQLCLIMonitor(this)))
       monitorThread.foreach(_.start())
     }
