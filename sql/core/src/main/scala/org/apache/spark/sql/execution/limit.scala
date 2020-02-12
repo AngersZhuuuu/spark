@@ -61,7 +61,9 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
         serializer,
         writeMetrics),
       readMetrics)
-    shuffled.mapPartitionsInternal(_.take(limit))
+    val limitResult = shuffled.mapPartitionsInternal(_.take(limit))
+    cleanupResources()
+    limitResult
   }
 }
 
@@ -74,7 +76,11 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
 case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
-  override def executeCollect(): Array[InternalRow] = child.executeTail(limit)
+  override def executeCollect(): Array[InternalRow] = {
+    val tailResult = child.executeTail(limit)
+    cleanupResources()
+    tailResult
+  }
   protected override def doExecute(): RDD[InternalRow] = {
     // This is a bit hacky way to avoid a shuffle and scanning all data when it performs
     // at `Dataset.tail`.
@@ -103,8 +109,12 @@ object BaseLimitExec {
 trait BaseLimitExec extends LimitExec with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.take(limit)
+  protected override def doExecute(): RDD[InternalRow] = {
+    val result = child.execute().mapPartitions { iter =>
+      iter.take(limit)
+    }
+    cleanupResources()
+    result
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -126,6 +136,8 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val thisPlan = ctx.addReferenceObj("plan", this)
+    val eagerCleanup = s"$thisPlan.cleanupResources();"
     // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
     // Here we have to inline it to not change its name. This is fine as we won't have many limit
     // operators in one query.
@@ -135,6 +147,7 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
        |   $countTerm += 1;
        |   ${consume(ctx, input)}
        | }
+       | $eagerCleanup
      """.stripMargin
   }
 }
@@ -204,6 +217,7 @@ case class TakeOrderedAndProjectExec(
         org.apache.spark.util.collection.Utils.takeOrdered(iter, limit)(ord)
       }
     }
+    cleanupResources()
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
         localTopK,
