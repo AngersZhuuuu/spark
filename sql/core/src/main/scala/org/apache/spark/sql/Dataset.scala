@@ -248,7 +248,7 @@ class Dataset[T] private[sql](
 
   // The resolved `ExpressionEncoder` which can be used to turn rows to objects of type T, after
   // collecting rows to the driver side.
-  private lazy val resolvedEnc = {
+  lazy val resolvedEnc = {
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
   }
 
@@ -2938,6 +2938,20 @@ class Dataset[T] private[sql](
   def collect(): Array[T] = withAction("collect", queryExecution)(collectFromPlan)
 
   /**
+   * Returns an array of InternalRow that contains all rows in this Dataset.
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * For Java API, use [[collectAsList]].
+   *
+   * @group action
+   * @since 1.6.0
+   */
+  def collectAsInternalRow(): Array[InternalRow] =
+    withAction("collectAsInternalRow", queryExecution)(collectAsInternalRowFromPlan)
+
+  /**
    * Returns a Java list that contains all rows in this Dataset.
    *
    * Running collect requires moving all the data into the application's driver process, and
@@ -2968,6 +2982,24 @@ class Dataset[T] private[sql](
       // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
       val enc = resolvedEnc.copy()
       plan.executeToIterator().map(enc.fromRow).asJava
+    }
+  }
+
+  /**
+   * Returns an iterator that contains all rows in this Dataset as InternalRow.
+   *
+   * The iterator will consume as much memory as the largest partition in this Dataset.
+   *
+   * @note this results in multiple Spark jobs, and if the input Dataset is the result
+   * of a wide transformation (e.g. join with different partitioners), to avoid
+   * recomputing the input Dataset should be cached first.
+   *
+   * @group action
+   * @since 2.0.0
+   */
+  def toLocalIteratorAsInternalRow(): java.util.Iterator[InternalRow] = {
+    withAction("toLocalIteratorAsInternalRow", queryExecution) { plan =>
+      plan.executeToIterator().asJava
     }
   }
 
@@ -3652,6 +3684,11 @@ class Dataset[T] private[sql](
     // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
     val enc = resolvedEnc.copy()
     plan.executeCollect().map(enc.fromRow)
+  }
+
+  private def collectAsInternalRowFromPlan(plan: SparkPlan): Array[InternalRow] = {
+    // `ExpressionEncoder` is not thread-safe, here we create a new encoder.
+    plan.executeCollect()
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {

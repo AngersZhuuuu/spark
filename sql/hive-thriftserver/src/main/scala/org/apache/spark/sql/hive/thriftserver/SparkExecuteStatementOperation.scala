@@ -36,6 +36,8 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.internal.SQLConf
@@ -53,11 +55,12 @@ private[hive] class SparkExecuteStatementOperation(
   with Logging {
 
   private var result: DataFrame = _
+  private var enc: ExpressionEncoder[SparkRow] = _
 
   // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
   // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
   // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
-  private var resultList: Option[Array[SparkRow]] = _
+  private var resultList: Option[Array[InternalRow]] = _
   private var previousFetchEndOffset: Long = 0
   private var previousFetchStartOffset: Long = 0
   private var iter: Iterator[SparkRow] = _
@@ -132,9 +135,9 @@ private[hive] class SparkExecuteStatementOperation(
         result.toLocalIterator.asScala
       } else {
         if (resultList.isEmpty) {
-          resultList = Some(result.collect())
+          resultList = Some(result.collectAsInternalRow())
         }
-        resultList.get.iterator
+        new ResultIterator(resultList.get.iterator, enc)
       }
     }
 
@@ -276,6 +279,7 @@ private[hive] class SparkExecuteStatementOperation(
 
       sqlContext.sparkContext.setJobGroup(statementId, statement)
       result = sqlContext.sql(statement)
+      enc = result.resolvedEnc.copy()
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
@@ -289,10 +293,10 @@ private[hive] class SparkExecuteStatementOperation(
       iter = {
         if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
           resultList = None
-          result.toLocalIterator.asScala
+          new ResultIterator(result.toLocalIteratorAsInternalRow.asScala, enc)
         } else {
-          resultList = Some(result.collect())
-          resultList.get.iterator
+          resultList = Some(result.collectAsInternalRow())
+          new ResultIterator(resultList.get.iterator, enc)
         }
       }
       dataTypes = result.schema.fields.map(_.dataType)
@@ -387,4 +391,12 @@ object SparkExecuteStatementOperation {
     }
     new TableSchema(schema.asJava)
   }
+}
+
+class ResultIterator(
+    iter: Iterator[InternalRow],
+    enc: ExpressionEncoder[SparkRow]) extends Iterator[SparkRow] {
+  override def hasNext: Boolean = iter.hasNext
+
+  override def next(): SparkRow = enc.fromRow(iter.next()).asInstanceOf[SparkRow]
 }
