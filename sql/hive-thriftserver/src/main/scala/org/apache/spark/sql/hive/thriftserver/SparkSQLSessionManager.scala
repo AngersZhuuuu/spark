@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.concurrent.Executors
+import java.util.Locale
 
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
+import org.apache.spark.sql.internal.SQLConf
 
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
@@ -67,7 +67,12 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
     setConfMap(ctx, hiveSessionState.getHiveVariables)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
-      ctx.sql(s"use ${sessionConf.get("use:database")}")
+      if (sqlContext.conf.hiveThriftServerSingleSession) {
+        ctx.sql(s"use ${sessionConf.get("use:database")}")
+      } else {
+        val wrap = new SessionCatalogWrap(ctx.sessionState.catalog, ctx.sessionState.conf)
+        wrap.setCurrentDatabase(sessionConf.get("use:database"))
+      }
     }
     sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
     sessionHandle
@@ -87,6 +92,34 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     while (iterator.hasNext) {
       val kv = iterator.next()
       conf.setConf(kv.getKey, kv.getValue)
+    }
+  }
+}
+
+class SessionCatalogWrap(sessionCatalog: SessionCatalog, conf: SQLConf) {
+  /**
+   * Format database name, taking into account case sensitivity.
+   */
+  protected[this] def formatDatabaseName(name: String): String = {
+    if (conf.caseSensitiveAnalysis) {
+      name
+    } else {
+      name.toLowerCase(Locale.ROOT)
+    }
+  }
+
+  // Quickly set currentDB
+  def setCurrentDatabase(db: String): Unit = {
+    val dbName = formatDatabaseName(db)
+    if (dbName == sessionCatalog.globalTempViewManager.database) {
+      throw new AnalysisException(
+        s"${sessionCatalog.globalTempViewManager.database} is a system preserved database, " +
+          "you cannot use it as current database. To access global temporary views, you should " +
+          "use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM " +
+          s"${sessionCatalog.globalTempViewManager.database}.viewName.")
+    }
+    sessionCatalog.synchronized {
+      ReflectionUtils.setSuperField(sessionCatalog, "currentDb", db)
     }
   }
 }
