@@ -216,9 +216,16 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       stagingDir: String): Path = {
     val inputPathName: String = inputPath.toString
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
+    val stagingURI = new Path(stagingDir).toUri
+    val extURI = inputPath.toUri
     var stagingPathName: String =
       if (inputPathName.indexOf(stagingDir) == -1) {
         new Path(inputPathName, stagingDir).toString
+      } else if (stagingURI.getAuthority != extURI.getAuthority) {
+        // If default.fs is hdfs://clusterA, inputPath is hdfs://clusterB/path/to/dir
+        // we need to change stagingDir's authority to clusterB to support write to clusterB
+        // if not, we will get error when combine inputPath and stagingDir.
+        new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath).toString
       } else {
         inputPathName.substring(0, inputPathName.indexOf(stagingDir) + stagingDir.length)
       }
