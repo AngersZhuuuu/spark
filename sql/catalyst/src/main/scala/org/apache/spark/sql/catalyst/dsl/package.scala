@@ -410,6 +410,10 @@ package object dsl {
 
       def union(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
+      def expand(
+          projections: Seq[Seq[Expression]],
+          output: Seq[Attribute]): LogicalPlan = Expand(projections, output, logicalPlan)
+
       def generate(
         generator: Generator,
         unrequiredChildIndex: Seq[Int] = Nil,

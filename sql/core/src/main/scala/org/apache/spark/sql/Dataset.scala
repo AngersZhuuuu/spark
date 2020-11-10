@@ -2370,6 +2370,10 @@ class Dataset[T] private[sql](
     }
   }
 
+  def expand(projection: Seq[Seq[Column]], output: Seq[Column]): DataFrame = withPlan {
+    Expand(projection, output.map(_.named.toAttribute), logicalPlan)
+  }
+
   /**
    * Returns a new Dataset by adding a column or replacing the existing column that has
    * the same name.

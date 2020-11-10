@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
+import scala.reflect.internal.Trees
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.log4j.Level
@@ -966,5 +967,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
         s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
     }
+  }
+
+  test("expand dsl") {
+    val output = testRelation2.output
+    val projection = (0 until 10).map { index =>
+      Seq(Add(output.head.expr, Literal("-" + index)).as("expand_col")) ++ output.tail
+    }
+    println(testRelation2.expand(projection, output))
   }
 }
