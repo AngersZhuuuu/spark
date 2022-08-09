@@ -140,7 +140,7 @@ def lit(col: Any) -> Column:
 @since(1.3)
 def col(col: str) -> Column:
     """
-    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.
 
     Examples
     --------
@@ -185,6 +185,40 @@ def abs(col: "ColumnOrName") -> Column:
     Computes the absolute value.
     """
     return _invoke_function_over_columns("abs", col)
+
+
+def mode(col: "ColumnOrName") -> Column:
+    """
+    Returns the most frequent value in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the most frequent value in a group.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(mode("year")).show()
+    +------+----------+
+    |course|mode(year)|
+    +------+----------+
+    |  Java|      2012|
+    |dotNET|      2012|
+    +------+----------+
+    """
+    return _invoke_function_over_columns("mode", col)
 
 
 @since(1.3)
@@ -303,6 +337,40 @@ def mean(col: "ColumnOrName") -> Column:
     Aggregate function: returns the average of the values in a group.
     """
     return _invoke_function_over_columns("mean", col)
+
+
+def median(col: "ColumnOrName") -> Column:
+    """
+    Returns the median of the values in a group.
+
+    .. versionadded:: 3.4.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        target column that the value will be returned
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the median of the values in a group.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([
+    ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
+    ...     ("Java", 2012, 22000), ("dotNET", 2012, 10000),
+    ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
+    ...     schema=("course", "year", "earnings"))
+    >>> df.groupby("course").agg(median("earnings")).show()
+    +------+----------------+
+    |course|median(earnings)|
+    +------+----------------+
+    |  Java|         22000.0|
+    |dotNET|         10000.0|
+    +------+----------------+
+    """
+    return _invoke_function_over_columns("median", col)
 
 
 @since(1.3)
@@ -2519,19 +2587,25 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
 
 def timestamp_seconds(col: "ColumnOrName") -> Column:
     """
+    Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z)
+    to a timestamp.
+
     .. versionadded:: 3.1.0
 
     Examples
     --------
     >>> from pyspark.sql.functions import timestamp_seconds
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
     >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).show()
     +-------------------+
     |                 ts|
     +-------------------+
-    |2008-12-25 07:30:00|
+    |2008-12-25 15:30:00|
     +-------------------+
+    >>> time_df.select(timestamp_seconds('unix_time').alias('ts')).printSchema()
+    root
+     |-- ts: timestamp (nullable = true)
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 
