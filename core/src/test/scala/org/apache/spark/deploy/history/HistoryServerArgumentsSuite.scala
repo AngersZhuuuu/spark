@@ -17,9 +17,7 @@
 package org.apache.spark.deploy.history
 
 import java.io.File
-import java.nio.charset.StandardCharsets._
-
-import com.google.common.io.Files
+import java.nio.file.Files
 
 import org.apache.spark._
 import org.apache.spark.internal.config.{ConfigEntry, History}
@@ -45,8 +43,8 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
   test("Properties File Arguments Parsing --properties-file") {
     withTempDir { tmpDir =>
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
-      Files.write("spark.test.CustomPropertyA blah\n" +
-        "spark.test.CustomPropertyB notblah\n", outFile, UTF_8)
+      Files.writeString(outFile.toPath, "spark.test.CustomPropertyA blah\n" +
+        "spark.test.CustomPropertyB notblah\n")
       val argStrings = Array("--properties-file", outFile.getAbsolutePath)
       val hsa = new HistoryServerArguments(conf, argStrings)
       assert(conf.get("spark.test.CustomPropertyA") === "blah")

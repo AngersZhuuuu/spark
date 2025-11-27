@@ -330,6 +330,14 @@ Security options for the Spark History Server are covered more detail in the
     <td>2.0.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.numCompactThreads</td>
+    <td>25% of available cores</td>
+    <td>
+      Number of threads that will be used by history server to compact event logs.
+    </td>
+    <td>4.1.0</td>
+  </tr>
+  <tr>
     <td>spark.history.store.maxDiskUsage</td>
     <td>10g</td>
     <td>
@@ -392,6 +400,14 @@ Security options for the Spark History Server are covered more detail in the
       Please read the section of "Applying compaction of old event log files" for more details.
     </td>
     <td>3.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.eventLog.rolling.onDemandLoadEnabled</td>
+    <td>true</td>
+    <td>
+      Whether to look up rolling event log locations on demand manner before listing files.
+    </td>
+    <td>4.1.0</td>
   </tr>
   <tr>
     <td>spark.history.store.hybridStore.enabled</td>
@@ -1083,6 +1099,49 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `GraphiteSink`: Sends metrics to a Graphite node.
 * `Slf4jSink`: Sends metrics to slf4j as log entries.
 * `StatsdSink`: Sends metrics to a StatsD node.
+
+The Prometheus Servlet mirrors the JSON data exposed by the <code>Metrics Servlet</code> and the REST API, but in a time-series format. The following are the equivalent Prometheus Servlet endpoints.   
+
+<table>
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>Port</th>
+      <th>JSON End Point</th>
+      <th>Prometheus End Point</th>
+    </tr>
+  </thead>
+  <tr>
+    <td>Master</td>
+    <td>8080</td>
+    <td><code>/metrics/master/json/</code></td>
+    <td><code>/metrics/master/prometheus/</code></td>
+  </tr>
+  <tr>
+    <td>Master</td>
+    <td>8080</td>
+    <td><code>/metrics/applications/json/</code></td>
+    <td><code>/metrics/applications/prometheus/</code></td>
+  </tr>
+  <tr>
+    <td>Worker</td>
+    <td>8081</td>
+    <td><code>/metrics/json/</code></td>
+    <td><code>/metrics/prometheus/</code></td>
+  </tr>
+  <tr>
+    <td>Driver</td>
+    <td>4040</td>
+    <td><code>/metrics/json/</code></td>
+    <td><code>/metrics/prometheus/</code></td>
+  </tr>
+  <tr>
+    <td>Driver</td>
+    <td>4040</td>
+    <td><code>/api/v1/applications/{id}/executors/</code></td>
+    <td><code>/metrics/executors/prometheus/</code></td>
+  </tr>
+</table>
 
 Spark also supports a Ganglia sink which is not included in the default build due to
 licensing restrictions:

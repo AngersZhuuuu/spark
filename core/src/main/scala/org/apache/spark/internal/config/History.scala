@@ -109,6 +109,12 @@ private[spark] object History {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10g")
 
+  val HISTORY_SERVER_UI_TITLE = ConfigBuilder("spark.history.ui.title")
+    .version("4.0.0")
+    .doc("Specifies the title of the History Server UI page.")
+    .stringConf
+    .createWithDefault("History Server")
+
   val HISTORY_SERVER_UI_PORT = ConfigBuilder("spark.history.ui.port")
     .doc("Web UI port to bind Spark History Server")
     .version("1.0.0")
@@ -152,6 +158,13 @@ private[spark] object History {
       .internal()
       .doubleConf
       .createWithDefault(0.7d)
+
+  val EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED =
+    ConfigBuilder("spark.history.fs.eventLog.rolling.onDemandLoadEnabled")
+      .doc("Whether to look up rolling event log locations on demand manner before listing files.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
     .version("3.0.0")
@@ -201,9 +214,23 @@ private[spark] object History {
     .toSequence
     .createWithDefault(Nil)
 
+  val HISTORY_UI_MAX_APPS = ConfigBuilder("spark.history.ui.maxApplications")
+    .version("2.0.1")
+    .doc("The number of applications to display on the history summary page. Application UIs " +
+      "are still available by accessing their URLs directly even if they are not displayed on " +
+      "the history summary page.")
+    .intConf
+    .createWithDefault(Integer.MAX_VALUE)
+
   val NUM_REPLAY_THREADS = ConfigBuilder("spark.history.fs.numReplayThreads")
     .version("2.0.0")
     .doc("Number of threads that will be used by history server to process event logs.")
+    .intConf
+    .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
+
+  val NUM_COMPACT_THREADS = ConfigBuilder("spark.history.fs.numCompactThreads")
+    .version("4.1.0")
+    .doc("Number of threads that will be used by history server to compact event logs.")
     .intConf
     .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
@@ -213,6 +240,7 @@ private[spark] object History {
       "exceeded, then the oldest applications will be removed from the cache. If an application " +
       "is not in the cache, it will have to be loaded from disk if it is accessed from the UI.")
     .intConf
+    .checkValue(v => v > 0, "The number of applications to retain should be a positive integer.")
     .createWithDefault(50)
 
   val PROVIDER = ConfigBuilder("spark.history.provider")

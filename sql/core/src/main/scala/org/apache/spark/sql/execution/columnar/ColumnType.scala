@@ -24,11 +24,11 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalBinaryType, PhysicalBooleanType, PhysicalByteType, PhysicalCalendarIntervalType, PhysicalDataType, PhysicalDecimalType, PhysicalDoubleType, PhysicalFloatType, PhysicalIntegerType, PhysicalLongType, PhysicalMapType, PhysicalNullType, PhysicalShortType, PhysicalStringType, PhysicalStructType}
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
 
 /**
@@ -815,6 +815,51 @@ private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] 
   }
 }
 
+/**
+ * Used to append/extract Java VariantVals into/from the underlying [[ByteBuffer]] of a column.
+ *
+ * Variants are encoded in `append` as:
+ * | value size | metadata size | value binary | metadata binary |
+ * and are only expected to be decoded in `extract`.
+ */
+private[columnar] object VARIANT
+  extends ColumnType[VariantVal] with DirectCopyColumnType[VariantVal] {
+  override def dataType: PhysicalDataType = PhysicalVariantType
+
+  /** Chosen to match the default size set in `VariantType`. */
+  override def defaultSize: Int = 2048
+
+  override def actualSize(row: InternalRow, ordinal: Int): Int = {
+    val v = getField(row, ordinal)
+    // 4 bytes each for the integers representing the 'value' and 'metadata' lengths.
+    8 + v.getValue().length + v.getMetadata().length
+  }
+
+  override def getField(row: InternalRow, ordinal: Int): VariantVal = row.getVariant(ordinal)
+
+  override def setField(row: InternalRow, ordinal: Int, value: VariantVal): Unit =
+    row.update(ordinal, value)
+
+  override def append(v: VariantVal, buffer: ByteBuffer): Unit = {
+    val valueSize = v.getValue().length
+    val metadataSize = v.getMetadata().length
+    ByteBufferHelper.putInt(buffer, valueSize)
+    ByteBufferHelper.putInt(buffer, metadataSize)
+    ByteBufferHelper.copyMemory(ByteBuffer.wrap(v.getValue()), buffer, valueSize)
+    ByteBufferHelper.copyMemory(ByteBuffer.wrap(v.getMetadata()), buffer, metadataSize)
+  }
+
+  override def extract(buffer: ByteBuffer): VariantVal = {
+    val valueSize = ByteBufferHelper.getInt(buffer)
+    val metadataSize = ByteBufferHelper.getInt(buffer)
+    val valueBuffer = ByteBuffer.allocate(valueSize)
+    ByteBufferHelper.copyMemory(buffer, valueBuffer, valueSize)
+    val metadataBuffer = ByteBuffer.allocate(metadataSize)
+    ByteBufferHelper.copyMemory(buffer, metadataBuffer, metadataSize)
+    new VariantVal(valueBuffer.array(), metadataBuffer.array())
+  }
+}
+
 private[columnar] object ColumnType {
   @tailrec
   def apply(dataType: DataType): ColumnType[_] = {
@@ -824,7 +869,8 @@ private[columnar] object ColumnType {
       case ByteType => BYTE
       case ShortType => SHORT
       case IntegerType | DateType | _: YearMonthIntervalType => INT
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LONG
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+        LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
       case s: StringType => STRING(s)

@@ -21,13 +21,7 @@ import javax.annotation.concurrent.GuardedBy;
 import java.io.InterruptedIOException;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -123,6 +117,30 @@ public class TaskMemoryManager {
   private volatile long acquiredButNotUsed = 0L;
 
   /**
+   * Current off heap memory usage by this task.
+   */
+  private long currentOffHeapMemory = 0L;
+
+  private final Object offHeapMemoryLock = new Object();
+
+  /*
+   * Current on heap memory usage by this task.
+   */
+  private long currentOnHeapMemory = 0L;
+
+  private final Object onHeapMemoryLock = new Object();
+
+  /**
+   * Peak off heap memory usage by this task.
+   */
+  private volatile long peakOffHeapMemory = 0L;
+
+  /**
+   * Peak on heap memory usage by this task.
+   */
+  private volatile long peakOnHeapMemory = 0L;
+
+  /**
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
@@ -202,6 +220,19 @@ public class TaskMemoryManager {
         logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
           requestingConsumer);
       }
+
+      if (mode == MemoryMode.OFF_HEAP) {
+        synchronized (offHeapMemoryLock) {
+          currentOffHeapMemory += got;
+          peakOffHeapMemory = Math.max(peakOffHeapMemory, currentOffHeapMemory);
+        }
+      } else {
+        synchronized (onHeapMemoryLock) {
+          currentOnHeapMemory += got;
+          peakOnHeapMemory = Math.max(peakOnHeapMemory, currentOnHeapMemory);
+        }
+      }
+
       return got;
     }
   }
@@ -247,15 +278,19 @@ public class TaskMemoryManager {
       }
     } catch (ClosedByInterruptException | InterruptedIOException e) {
       // This called by user to kill a task (e.g: speculative task).
-      logger.error("error while calling spill() on {}", e,
-        MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
+      logger.error("Error while calling spill() on {}", e,
+        MDC.of(LogKeys.MEMORY_CONSUMER, consumerToSpill));
       throw new RuntimeException(e.getMessage());
     } catch (IOException e) {
-      logger.error("error while calling spill() on {}", e,
-        MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, consumerToSpill));
+      logger.error("Error while calling spill() on {}", e,
+        MDC.of(LogKeys.MEMORY_CONSUMER, consumerToSpill));
       // checkstyle.off: RegexpSinglelineJava
-      throw new SparkOutOfMemoryError("error while calling spill() on " + consumerToSpill + " : "
-        + e.getMessage());
+      throw new SparkOutOfMemoryError(
+        "SPILL_OUT_OF_MEMORY",
+        new HashMap<String, String>() {{
+          put("consumerToSpill", consumerToSpill.toString());
+          put("message", e.getMessage());
+        }});
       // checkstyle.on: RegexpSinglelineJava
     }
   }
@@ -269,6 +304,15 @@ public class TaskMemoryManager {
         consumer);
     }
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
+    if (consumer.getMode() == MemoryMode.OFF_HEAP) {
+      synchronized (offHeapMemoryLock) {
+        currentOffHeapMemory -= size;
+      }
+    } else {
+      synchronized (onHeapMemoryLock) {
+        currentOnHeapMemory -= size;
+      }
+    }
   }
 
   /**
@@ -276,7 +320,7 @@ public class TaskMemoryManager {
    */
   public void showMemoryUsage() {
     logger.info("Memory used in task {}",
-      MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
+      MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
     synchronized (this) {
       long memoryAccountedForByConsumers = 0;
       for (MemoryConsumer c: consumers) {
@@ -284,20 +328,23 @@ public class TaskMemoryManager {
         memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
           logger.info("Acquired by {}: {}",
-            MDC.of(LogKeys.MEMORY_CONSUMER$.MODULE$, c),
-            MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(totalMemUsage)));
+            MDC.of(LogKeys.MEMORY_CONSUMER, c),
+            MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(totalMemUsage)));
         }
       }
       long memoryNotAccountedFor =
         memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
       logger.info(
         "{} bytes of memory were used by task {} but are not associated with specific consumers",
-        MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, memoryNotAccountedFor),
-        MDC.of(LogKeys.TASK_ATTEMPT_ID$.MODULE$, taskAttemptId));
+        MDC.of(LogKeys.MEMORY_SIZE, memoryNotAccountedFor),
+        MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
       logger.info(
-        "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
-        MDC.of(LogKeys.EXECUTION_MEMORY_SIZE$.MODULE$, memoryManager.executionMemoryUsed()),
-        MDC.of(LogKeys.STORAGE_MEMORY_SIZE$.MODULE$,  memoryManager.storageMemoryUsed()));
+        "{} bytes of memory are used for execution " +
+                "and {} bytes of memory are used for storage " +
+                "and {} bytes of unmanaged memory are used",
+        MDC.of(LogKeys.EXECUTION_MEMORY_SIZE, memoryManager.executionMemoryUsed()),
+        MDC.of(LogKeys.STORAGE_MEMORY_SIZE,  memoryManager.storageMemoryUsed()),
+        MDC.of(LogKeys.MEMORY_SIZE, UnifiedMemoryManager$.MODULE$.getUnmanagedMemoryUsed()));
     }
   }
 
@@ -344,7 +391,7 @@ public class TaskMemoryManager {
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
       logger.warn("Failed to allocate a page ({} bytes), try again.",
-        MDC.of(LogKeys.PAGE_SIZE$.MODULE$, acquired));
+        MDC.of(LogKeys.PAGE_SIZE, acquired));
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
       synchronized (this) {
@@ -506,5 +553,20 @@ public class TaskMemoryManager {
    */
   public MemoryMode getTungstenMemoryMode() {
     return tungstenMemoryMode;
+  }
+
+  /**
+   * Returns peak task-level off-heap memory usage in bytes.
+   *
+   */
+  public long getPeakOnHeapExecutionMemory() {
+    return peakOnHeapMemory;
+  }
+
+  /**
+   * Returns peak task-level on-heap memory usage in bytes.
+   */
+  public long getPeakOffHeapExecutionMemory() {
+    return peakOffHeapMemory;
   }
 }

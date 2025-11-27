@@ -18,7 +18,7 @@
 # mypy: disable-error-code="empty-body"
 
 import sys
-from typing import List, TYPE_CHECKING, Union
+from typing import Sequence, TYPE_CHECKING, Union
 
 from pyspark.sql.utils import dispatch_window_method
 from pyspark.util import (
@@ -28,7 +28,7 @@ from pyspark.util import (
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql._typing import ColumnOrName, ColumnOrName_
+    from pyspark.sql._typing import ColumnOrName
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -68,7 +68,7 @@ class Window:
 
     @staticmethod
     @dispatch_window_method
-    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def partitionBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the partitioning defined.
 
@@ -86,8 +86,7 @@ class Window:
 
         Examples
         --------
-        >>> from pyspark.sql import Window
-        >>> from pyspark.sql.functions import row_number
+        >>> from pyspark.sql import Window, functions as sf
         >>> df = spark.createDataFrame(
         ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
         >>> df.show()
@@ -105,7 +104,7 @@ class Window:
         Show row number order by ``id`` in partition ``category``.
 
         >>> window = Window.partitionBy("category").orderBy("id")
-        >>> df.withColumn("row_number", row_number().over(window)).show()
+        >>> df.withColumn("row_number", sf.row_number().over(window)).show()
         +---+--------+----------+
         | id|category|row_number|
         +---+--------+----------+
@@ -121,7 +120,7 @@ class Window:
 
     @staticmethod
     @dispatch_window_method
-    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def orderBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         """
         Creates a :class:`WindowSpec` with the ordering defined.
 
@@ -139,8 +138,7 @@ class Window:
 
         Examples
         --------
-        >>> from pyspark.sql import Window
-        >>> from pyspark.sql.functions import row_number
+        >>> from pyspark.sql import Window, functions as sf
         >>> df = spark.createDataFrame(
         ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
         >>> df.show()
@@ -158,7 +156,7 @@ class Window:
         Show row number order by ``category`` in partition ``id``.
 
         >>> window = Window.partitionBy("id").orderBy("category")
-        >>> df.withColumn("row_number", row_number().over(window)).show()
+        >>> df.withColumn("row_number", sf.row_number().over(window)).show()
         +---+--------+----------+
         | id|category|row_number|
         +---+--------+----------+
@@ -214,8 +212,7 @@ class Window:
 
         Examples
         --------
-        >>> from pyspark.sql import Window
-        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import Window, functions as sf
         >>> df = spark.createDataFrame(
         ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
         >>> df.show()
@@ -234,7 +231,7 @@ class Window:
         in partition ``category``
 
         >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
-        >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category", "sum").show()
+        >>> df.withColumn("sum", sf.sum("id").over(window)).sort("id", "category", "sum").show()
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
@@ -294,8 +291,7 @@ class Window:
 
         Examples
         --------
-        >>> from pyspark.sql import Window
-        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import Window, functions as sf
         >>> df = spark.createDataFrame(
         ...      [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
         >>> df.show()
@@ -314,7 +310,7 @@ class Window:
         in partition ``category``
 
         >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
-        >>> df.withColumn("sum", func.sum("id").over(window)).sort("id", "category").show()
+        >>> df.withColumn("sum", sf.sum("id").over(window)).sort("id", "category").show()
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
@@ -348,7 +344,7 @@ class WindowSpec:
 
         return WindowSpec.__new__(WindowSpec, jspec)
 
-    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def partitionBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
 
@@ -361,7 +357,7 @@ class WindowSpec:
         """
         ...
 
-    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> "WindowSpec":
+    def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> "WindowSpec":
         """
         Defines the ordering columns in a :class:`WindowSpec`.
 

@@ -112,7 +112,7 @@ class FileIndexSuite extends SharedSparkSession {
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val msg = intercept[AssertionError] {
+        val msg = intercept[SparkRuntimeException] {
           val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
           fileIndex.partitionSpec()
         }.getMessage
@@ -137,8 +137,8 @@ class FileIndexSuite extends SharedSparkSession {
           exception = intercept[SparkRuntimeException] {
             fileIndex.partitionSpec()
           },
-          errorClass = "_LEGACY_ERROR_TEMP_2058",
-          parameters = Map("value" -> "foo", "dataType" -> "IntegerType", "columnName" -> "a")
+          condition = "INVALID_PARTITION_VALUE",
+          parameters = Map("value" -> "'foo'", "dataType" -> "\"INT\"", "columnName" -> "`a`")
         )
       }
 
@@ -566,7 +566,7 @@ class FileIndexSuite extends SharedSparkSession {
       new File(directoryPath, "part_col=1").renameTo(new File(directoryPath, "undefined"))
 
       // By default, we expect the invalid path assertion to trigger.
-      val ex = intercept[AssertionError] {
+      val ex = intercept[SparkRuntimeException] {
         spark.read
           .format("parquet")
           .load(directoryPath.getCanonicalPath)
@@ -585,7 +585,7 @@ class FileIndexSuite extends SharedSparkSession {
 
       // Data source option override takes precedence.
       withSQLConf(SQLConf.IGNORE_INVALID_PARTITION_PATHS.key -> "true") {
-        val ex = intercept[AssertionError] {
+        val ex = intercept[SparkRuntimeException] {
           spark.read
             .format("parquet")
             .option(FileIndexOptions.IGNORE_INVALID_PARTITION_PATHS, "false")
@@ -655,6 +655,30 @@ class FileIndexSuite extends SharedSparkSession {
     assert(FileIndexOptions.isValidOption("modifiedbefore"))
     assert(FileIndexOptions.isValidOption("modifiedafter"))
     assert(FileIndexOptions.isValidOption("pathglobfilter"))
+  }
+
+  test("SPARK-52339: Correctly compare root paths") {
+    withTempDir { dir =>
+      val file1 = new File(dir, "text1.txt")
+      stringToFile(file1, "text1")
+      val file2 = new File(dir, "text2.txt")
+      stringToFile(file2, "text2")
+      val path1 = new Path(file1.getCanonicalPath)
+      val path2 = new Path(file2.getCanonicalPath)
+
+      val schema = StructType(Seq(StructField("a", StringType, false)))
+
+      // Verify that the order of paths doesn't matter
+      val fileIndex1a = new InMemoryFileIndex(spark, Seq(path1, path2), Map.empty, Some(schema))
+      val fileIndex1b = new InMemoryFileIndex(spark, Seq(path2, path1), Map.empty, Some(schema))
+      assert(fileIndex1a == fileIndex1b)
+
+      // Verify that a different number of paths does matter
+      val fileIndex2a = new InMemoryFileIndex(spark, Seq(path1, path1), Map.empty, Some(schema))
+      val fileIndex2b = new InMemoryFileIndex(spark, Seq(path1, path1, path1),
+        Map.empty, Some(schema))
+      assert(fileIndex2a != fileIndex2b)
+    }
   }
 }
 

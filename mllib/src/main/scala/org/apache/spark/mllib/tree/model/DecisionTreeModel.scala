@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -204,7 +204,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       // TODO: Fix this issue for real.
       val memThreshold = 768
       if (sc.isLocal) {
-        val driverMemory = sc.getConf.getOption("spark.driver.memory")
+        val driverMemory = sc.getReadOnlyConf.getOption("spark.driver.memory")
           .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
           .map(Utils.memoryStringToMb)
           .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
@@ -226,15 +226,15 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       }
 
       // Create JSON metadata.
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("algo" -> model.algo.toString) ~ ("numNodes" -> model.numNodes)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Create Parquet data.
       val nodes = model.topNode.subtreeIterator.toSeq
       val dataRDD = sc.parallelize(nodes).map(NodeData.apply(0, _))
-      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 

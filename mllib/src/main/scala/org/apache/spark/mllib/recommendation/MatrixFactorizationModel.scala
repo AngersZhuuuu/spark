@@ -30,7 +30,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.mllib.linalg.BLAS
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -387,7 +387,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       import spark.implicits._
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(metadataPath(path))
       model.userFeatures.toDF("id", "features").write.parquet(userPath(path))
       model.productFeatures.toDF("id", "features").write.parquet(productPath(path))
     }

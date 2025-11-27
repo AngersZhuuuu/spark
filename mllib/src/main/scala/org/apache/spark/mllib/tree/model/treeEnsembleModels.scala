@@ -26,7 +26,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -402,7 +402,7 @@ private[tree] object TreeEnsembleModel extends Logging {
       // TODO: Fix this issue for real.
       val memThreshold = 768
       if (sc.isLocal) {
-        val driverMemory = sc.getConf.getOption("spark.driver.memory")
+        val driverMemory = sc.getReadOnlyConf.getOption("spark.driver.memory")
           .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
           .map(Utils.memoryStringToMb)
           .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
@@ -430,7 +430,7 @@ private[tree] object TreeEnsembleModel extends Logging {
       val metadata = compact(render(
         ("class" -> className) ~ ("version" -> thisFormatVersion) ~
           ("metadata" -> Extraction.decompose(ensembleMetadata))))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Create Parquet data.
       val dataRDD = sc.parallelize(model.trees.zipWithIndex.toImmutableArraySeq)

@@ -28,7 +28,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.security.HadoopDelegationTokenProvider
@@ -150,6 +150,9 @@ private[deploy] class HadoopFSDelegationTokenProvider
         val interval = newExpiration - getIssueDate(tokenKind, identifier)
         logInfo(log"Renewal interval is ${MDC(TOTAL_TIME, interval)} for" +
           log" token ${MDC(TOKEN_KIND, tokenKind)}")
+        // The token here is only used to obtain renewal intervals. We should cancel it in
+        // a timely manner to avoid causing additional pressure on the server.
+        token.cancel(hadoopConf)
         interval
       }.toOption
     }

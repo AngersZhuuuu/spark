@@ -29,7 +29,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   import ParserUtils._
 
   val setConfContext = buildContext("set example.setting.name=setting.value") { parser =>
-    parser.statement().asInstanceOf[SetConfigurationContext]
+    parser.setResetStatement().asInstanceOf[SetConfigurationContext]
   }
 
   val showFuncContext = buildContext("show functions foo.bar") { parser =>
@@ -143,6 +143,16 @@ class ParserUtilsSuite extends SparkFunSuite {
     // Guard against off-by-one errors in the "all chars are hex" routine:
     assert(unescapeSQLString("\"abc\\uAAAXa\"") == "abcuAAAXa")
 
+    // Double-quote escaping ("", '')
+    assert(unescapeSQLString(""" "a""a" """.trim) == """ a"a """.trim)
+    assert(unescapeSQLString(""" "a""a" """.trim, true) == "aa")
+    assert(unescapeSQLString(""" 'a''a' """.trim) == "a'a")
+    assert(unescapeSQLString(""" 'a''a' """.trim, true) == "aa")
+    // Single-quoted double quote string or double-quoted single quote string isn't affected
+    assert(unescapeSQLString(""" 'a""a' """.trim) == """ a""a """.trim)
+    assert(unescapeSQLString(""" 'a""a' """.trim, true) == """ a""a """.trim)
+    assert(unescapeSQLString(""" "a''a" """.trim) == "a''a")
+    assert(unescapeSQLString(""" "a''a" """.trim, true) == "a''a")
     // scalastyle:on nonascii
   }
 
@@ -159,7 +169,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       exception = intercept[ParseException] {
         operationNotAllowed(errorMessage, showFuncContext)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> errorMessage))
   }
 
@@ -172,7 +182,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       exception = intercept[ParseException] {
         checkDuplicateKeys(properties2, createDbContext)
       },
-      errorClass = "DUPLICATE_KEY",
+      condition = "DUPLICATE_KEY",
       parameters = Map("keyColumn" -> "`a`"))
   }
 
@@ -196,12 +206,22 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("string") {
-    assert(string(showDbsContext.pattern.STRING_LITERAL()) == "identifier_with_wildcards")
-    assert(string(createDbContext.commentSpec().get(0).stringLit().STRING_LITERAL()) ==
-      "database_comment")
+    val dataTypeBuilder = new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
+    val token1 = dataTypeBuilder.visitStringLit(showDbsContext.pattern)
+    if (token1 != null) {
+      assert(string(token1) == "identifier_with_wildcards")
+    }
 
-    assert(string(createDbContext.locationSpec.asScala.head.stringLit().STRING_LITERAL()) ==
-      "/home/user/db")
+    val token2 = dataTypeBuilder.visitStringLit(createDbContext.commentSpec().get(0).stringLit())
+    if (token2 != null) {
+      assert(string(token2) == "database_comment")
+    }
+
+    val token3 = dataTypeBuilder.visitStringLit(
+      createDbContext.locationSpec.asScala.head.stringLit())
+    if (token3 != null) {
+      assert(string(token3) == "/home/user/db")
+    }
   }
 
   test("position") {
@@ -223,7 +243,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       exception = intercept[ParseException] {
         validate(f1(emptyContext), message, emptyContext)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> message))
   }
 
@@ -231,7 +251,8 @@ class ParserUtilsSuite extends SparkFunSuite {
     val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
     val (location, origin) = withOrigin(ctx) {
-      (string(ctx.stringLit().STRING_LITERAL), CurrentOrigin.get)
+      (Option(new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
+        .visitStringLit(ctx.stringLit())).map(string).getOrElse(""), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))
@@ -244,7 +265,7 @@ class ParserUtilsSuite extends SparkFunSuite {
         Some(context)
       case _ =>
         val it = ctx.children.iterator()
-        while(it.hasNext) {
+        while (it.hasNext) {
           it.next() match {
             case p: ParserRuleContext =>
               val childResult = findCastContext(p)

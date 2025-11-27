@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -80,21 +80,41 @@ case class InlineCTE(
       outerCTEId: Option[Long] = None): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        cteDefs.foreach { cteDef =>
-          cteMap(cteDef.id) = CTEReferenceInfo(
-            cteDef = cteDef,
-            refCount = 0,
-            outgoingRefs = mutable.Map.empty.withDefaultValue(0),
-            shouldInline = true
-          )
+        val isDuplicated = cteDefs.forall(cteDef => cteMap.contains(cteDef.id))
+        if (isDuplicated) {
+          // If we have seen this `WithCTE` node then it must be self-contained so we can clear
+          // the references from containers to the definitions, and we don't need to process it
+          // again
+
+          cteDefs.foreach { cteDef =>
+            cteMap(cteDef.id).container.foreach(c => cteMap(c).outgoingRefs -= cteDef.id)
+          }
+        } else {
+          cteDefs.foreach { cteDef =>
+            cteMap(cteDef.id) = CTEReferenceInfo(
+              cteDef = cteDef,
+              refCount = 0,
+              outgoingRefs = mutable.Map.empty.withDefaultValue(0),
+              shouldInline = true,
+              container = outerCTEId
+            )
+          }
+
+          cteDefs.foreach { cteDef =>
+            buildCTEMap(cteDef, cteMap, Some(cteDef.id))
+          }
+          buildCTEMap(child, cteMap, outerCTEId)
         }
-        cteDefs.foreach { cteDef =>
-          buildCTEMap(cteDef, cteMap, Some(cteDef.id))
-        }
-        buildCTEMap(child, cteMap, outerCTEId)
 
       case ref: CTERelationRef =>
         cteMap(ref.cteId) = cteMap(ref.cteId).withRefCountIncreased(1)
+
+        // The `outerCTEId` CTE definition can either reference `cteId` definition if `cteId` is in
+        // the same or in an outer `WithCTE` node, or `outerCTEId` can contain `cteId` definition if
+        // `cteId` is an inner `WithCTE` node inside `outerCTEId`.
+        // In both cases we can track the relations in `outgoingRefs` when we see a definition the
+        // first time. But if we encounter a conflicting duplicated contains relation later, then we
+        // will remove the references of the first contains relation.
         outerCTEId.foreach { cteId =>
           cteMap(cteId).increaseOutgoingRefCount(ref.cteId, 1)
         }
@@ -140,8 +160,7 @@ case class InlineCTE(
       cteMap: mutable.Map[Long, CTEReferenceInfo]): LogicalPlan = {
     plan match {
       case WithCTE(child, cteDefs) =>
-        val notInlined = mutable.ArrayBuffer.empty[CTERelationDef]
-        cteDefs.foreach { cteDef =>
+        val notInlined = cteDefs.flatMap {cteDef =>
           val refInfo = cteMap(cteDef.id)
           if (refInfo.refCount > 0) {
             val newDef = refInfo.cteDef.copy(child = inlineCTE(refInfo.cteDef.child, cteMap))
@@ -149,9 +168,15 @@ case class InlineCTE(
             cteMap(cteDef.id) = cteMap(cteDef.id).copy(
               cteDef = newDef, shouldInline = inlineDecision
             )
-            if (!inlineDecision) notInlined += newDef
+            if (!inlineDecision) {
+              Seq(newDef)
+            } else {
+              Nil
+            }
           } else if (keepDanglingRelations) {
-            notInlined += refInfo.cteDef
+            Seq(refInfo.cteDef)
+          } else {
+            Nil
           }
         }
         val inlined = inlineCTE(child, cteMap)
@@ -159,19 +184,25 @@ case class InlineCTE(
           inlined
         } else {
           // Retain the not-inlined CTE relations in place.
-          WithCTE(inlined, notInlined.toSeq)
+          WithCTE(inlined, notInlined)
         }
 
       case ref: CTERelationRef =>
         val refInfo = cteMap(ref.cteId)
+
+        val cteBody = if (ref.isUnlimitedRecursion) {
+          setUnlimitedRecursion(refInfo.cteDef.child, ref.cteId)
+        } else {
+          refInfo.cteDef.child
+        }
         if (refInfo.shouldInline) {
           if (ref.outputSet == refInfo.cteDef.outputSet) {
-            refInfo.cteDef.child
+            cteBody
           } else {
             val ctePlan = DeduplicateRelations(
               Join(
-                refInfo.cteDef.child,
-                refInfo.cteDef.child,
+                cteBody,
+                cteBody,
                 Inner,
                 None,
                 JoinHint(None, None)
@@ -201,6 +232,18 @@ case class InlineCTE(
       case _ => plan
     }
   }
+
+  // Helper function to set unlimited recursion.
+  private def setUnlimitedRecursion(plan: LogicalPlan, id: Long): LogicalPlan = {
+    plan match {
+      case ul: UnionLoop if ul.id == id =>
+        // Since there is exactly one UnionLoop node with this id in the CTE body, we can stop the
+        // recursion here.
+        ul.copy(limit = Some(-1))
+      case other =>
+        other.withNewChildren(plan.children.map(child => setUnlimitedRecursion(child, id)))
+    }
+  }
 }
 
 /**
@@ -211,12 +254,15 @@ case class InlineCTE(
  *                 from other CTE relations and regular places.
  * @param outgoingRefs A mutable map that tracks outgoing reference counts to other CTE relations.
  * @param shouldInline If true, this CTE relation should be inlined in the places that reference it.
+ * @param container The container of a CTE definition is another CTE definition in which the
+ *                  `WithCTE` node of the definition resides.
  */
 case class CTEReferenceInfo(
     cteDef: CTERelationDef,
     refCount: Int,
     outgoingRefs: mutable.Map[Long, Int],
-    shouldInline: Boolean) {
+    shouldInline: Boolean,
+    container: Option[Long]) {
 
   def withRefCountIncreased(count: Int): CTEReferenceInfo = {
     copy(refCount = refCount + count)

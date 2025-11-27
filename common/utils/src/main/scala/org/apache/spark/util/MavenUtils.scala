@@ -22,7 +22,6 @@ import java.net.URI
 import java.text.ParseException
 import java.util.UUID
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
 import org.apache.ivy.core.module.descriptor.{Artifact, DefaultDependencyDescriptor, DefaultExcludeRule, DefaultModuleDescriptor, ExcludeRule}
@@ -36,7 +35,7 @@ import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.util.ArrayImplicits._
 
 /** Provides utility functions to be used inside SparkSubmit. */
@@ -342,7 +341,7 @@ private[spark] object MavenUtils extends Logging {
   }
 
   /* Set ivy settings for location of cache, if option is supplied */
-  private def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
+  private[util] def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
     val alternateIvyDir = ivyPath.filterNot(_.trim.isEmpty).getOrElse {
       // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
       System.getProperty("ivy.home",
@@ -567,7 +566,7 @@ private[spark] object MavenUtils extends Logging {
   }
 
   private def isInvalidQueryString(tokens: Array[String]): Boolean = {
-    tokens.length != 2 || StringUtils.isBlank(tokens(0)) || StringUtils.isBlank(tokens(1))
+    tokens.length != 2 || SparkStringUtils.isBlank(tokens(0)) || SparkStringUtils.isBlank(tokens(1))
   }
 
   /**
@@ -650,8 +649,9 @@ private[spark] object MavenUtils extends Logging {
       val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq
       if (invalidParams.nonEmpty) {
         logWarning(
-          s"Invalid parameters `${invalidParams.sorted.mkString(",")}` found " +
-            s"in Ivy URI query `$uriQuery`.")
+          log"Invalid parameters `${MDC(LogKeys.INVALID_PARAMS,
+            invalidParams.sorted.mkString(","))}` " +
+            log"found in Ivy URI query `${MDC(LogKeys.URI, uriQuery)}`.")
       }
 
       (transitive, exclusionList, repos)

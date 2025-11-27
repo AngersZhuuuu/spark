@@ -19,12 +19,10 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
@@ -321,7 +319,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
         },
         AssertOnQuery { q =>
           eventually(timeout(streamingTimeout)) {
-            q.lastProgress.sink.numOutputRows == 0L
+            assert(q.lastProgress.sink.numOutputRows == 0L)
             true
           }
         }
@@ -468,7 +466,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       val checkpointDir = Utils.createTempDir().getCanonicalFile
       // Copy the checkpoint to a temp dir to prevent changes to the original.
       // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-      FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+      Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
       inputData.addData(("a", 1, "dummy"))
       inputData.addData(("a", 2, "dummy"), ("b", 3, "dummy"))
@@ -504,7 +502,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       val checkpointDir = Utils.createTempDir().getCanonicalFile
       // Copy the checkpoint to a temp dir to prevent changes to the original.
       // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-      FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+      Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
       inputData.addData(("a", 1, "dummy"))
       inputData.addData(("a", 2, "dummy"), ("b", 3, "dummy"))
@@ -521,7 +519,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       // verify that the key schema not compatible error is thrown
       checkError(
         ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-        errorClass = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+        condition = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
         parameters = Map("storedKeySchema" -> ".*",
           "newKeySchema" -> ".*"),
         matchPVals = true
@@ -567,12 +565,27 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
     checkError(
       ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+      condition = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
       parameters = Map(
         "schema" -> ".+\"str\":\"spark.UTF8_LCASE\".+"
       ),
       matchPVals = true
     )
+  }
+
+  test("test that avro encoding is not supported") {
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS().dropDuplicates()
+
+    val ex = intercept[Exception] {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+        testStream(result, Append)(
+          AddData(inputData, "a"),
+          ProcessAllAvailable()
+        )
+      }
+    }
+    assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
   }
 }
 

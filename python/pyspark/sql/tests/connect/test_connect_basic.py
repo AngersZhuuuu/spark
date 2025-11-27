@@ -22,10 +22,10 @@ import shutil
 import tempfile
 import io
 from contextlib import redirect_stdout
+import datetime
 
 from pyspark.util import is_remote_only
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -37,41 +37,35 @@ from pyspark.sql.types import (
     Row,
 )
 from pyspark.testing.utils import eventually
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,
-    ReusedConnectTestCase,
+    connect_requirement_message,
+    ReusedMixedTestCase,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
-from pyspark.errors.exceptions.connect import (
-    AnalysisException,
-    SparkConnectException,
-)
+
 
 if should_test_connect:
-    from pyspark.sql.connect.proto import Expression as ProtoExpression
+    from pyspark.sql.connect.proto import ExecutePlanResponse, Expression as ProtoExpression
     from pyspark.sql.connect.column import Column
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
+    from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
 
 
-@unittest.skipIf(is_remote_only(), "Requires JVM access")
-class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
+@unittest.skipIf(
+    not should_test_connect or is_remote_only(),
+    connect_requirement_message or "Requires JVM access",
+)
+class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
     """Parent test fixture class for all Spark Connect related
     test cases."""
 
     @classmethod
     def setUpClass(cls):
         super(SparkConnectSQLTestCase, cls).setUpClass()
-        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
-        # PySpark libraries.
-        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
-
-        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
-        cls.spark = PySparkSession._instantiatedSession
-        assert cls.spark is not None
 
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.testDataStr = [Row(key=str(i)) for i in range(100)]
@@ -93,9 +87,6 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
     def tearDownClass(cls):
         try:
             cls.spark_connect_clean_up_test_data()
-            # Stopping Spark Connect closes the session in JVM at the server.
-            cls.spark = cls.connect
-            del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
         finally:
             super(SparkConnectSQLTestCase, cls).tearDownClass()
 
@@ -143,6 +134,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         data = dumps(cdf)
         cdf2 = loads(data)
         self.assertEqual(cdf.collect(), cdf2.collect())
+
+    def test_window_spec_serialization(self):
+        from pyspark.sql.connect.window import Window
+        from pyspark.serializers import CPickleSerializer
+
+        pickle_ser = CPickleSerializer()
+        w = Window.partitionBy("some_string").orderBy("value")
+        b = pickle_ser.dumps(w)
+        w2 = pickle_ser.loads(b)
+        self.assertEqual(str(w), str(w2))
 
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
@@ -217,8 +218,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "float",
             },
@@ -229,8 +230,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "NoneType",
             },
@@ -241,8 +242,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={
+            errorClass="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={
                 "arg_name": "item",
                 "arg_type": "DataFrame",
             },
@@ -630,6 +631,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df2 = self.spark.sql(sqlText, args={"minId": 7, "m": SF.create_map(SF.lit("a"), SF.lit(1))})
         self.assert_eq(df.toPandas(), df2.toPandas())
 
+    def test_namedargs_with_global_limit(self):
+        sqlText = """SELECT * FROM VALUES (TIMESTAMP('2022-12-25 10:30:00'), 1) as tab(date, val)
+         where val = :val"""
+        df = self.connect.sql(sqlText, args={"val": 1})
+        df2 = self.spark.sql(sqlText, args={"val": 1})
+        self.assert_eq(df.toPandas(), df2.toPandas())
+
+        self.assert_eq(df.first()[0], datetime.datetime(2022, 12, 25, 10, 30))
+        self.assert_eq(df.first().date, datetime.datetime(2022, 12, 25, 10, 30))
+        self.assert_eq(df.first()[1], 1)
+        self.assert_eq(df.first().val, 1)
+
     def test_sql_with_pos_args(self):
         sqlText = "SELECT *, element_at(?, 1) FROM range(10) WHERE id > ?"
         df = self.connect.sql(sqlText, args=[CF.array(CF.lit(1)), 7])
@@ -644,8 +657,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
             self.check_error(
                 exception=pe.exception,
-                error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "args", "arg_type": "set"},
+                errorClass="INVALID_TYPE",
+                messageParameters={"arg_name": "args", "arg_type": "set"},
             )
 
     def test_deduplicate(self):
@@ -657,18 +670,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df.dropDuplicates(["name"]).toPandas(), df2.dropDuplicates(["name"]).toPandas()
         )
-        self.assert_eq(
-            df.drop_duplicates(["name"]).toPandas(), df2.drop_duplicates(["name"]).toPandas()
-        )
-        self.assert_eq(
-            df.dropDuplicates(["name", "id"]).toPandas(),
-            df2.dropDuplicates(["name", "id"]).toPandas(),
-        )
-        self.assert_eq(
-            df.drop_duplicates(["name", "id"]).toPandas(),
-            df2.drop_duplicates(["name", "id"]).toPandas(),
-        )
-        self.assert_eq(df.dropDuplicates("name").toPandas(), df2.dropDuplicates("name").toPandas())
 
     def test_drop(self):
         # SPARK-41169: test drop
@@ -917,8 +918,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_BE_EMPTY",
-            message_parameters={"item": "exprs"},
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "exprs"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -926,8 +927,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OF_COLUMN",
-            message_parameters={"arg_name": "exprs"},
+            errorClass="NOT_LIST_OF_COLUMN",
+            messageParameters={"arg_name": "exprs"},
         )
 
     def test_with_columns(self):
@@ -1023,8 +1024,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_ITEM_FOR_CONTAINER",
-            message_parameters={
+            errorClass="INVALID_ITEM_FOR_CONTAINER",
+            messageParameters={
                 "arg_name": "parameters",
                 "allowed_types": "str, float, int, Column, list[str], list[float], list[int]",
                 "item_type": "dict",
@@ -1087,8 +1088,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
         self.check_error(
             exception=pe.exception,
-            error_class="UNKNOWN_EXPLAIN_MODE",
-            message_parameters={"explain_mode": "unknown"},
+            errorClass="UNKNOWN_EXPLAIN_MODE",
+            messageParameters={"explain_mode": "unknown"},
         )
 
     def test_count(self) -> None:
@@ -1125,6 +1126,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(SparkConnectException) as exc:
             self.connect.range(1, 10).select(CF.col("id").alias("this", "is", "not")).collect()
         self.assertIn("(this, is, not)", str(exc.exception))
+
+    def test_alias_metadata(self):
+        df = self.connect.createDataFrame([("",)], ["a"])
+        df = df.withMetadata("a", {"foo": "bar"})
+        self.assertEqual(df.schema["a"].metadata, {"foo": "bar"})
+
+        # SPARK-51426: Ensure setting metadata to `{}` clears it
+        df = df.select([CF.col("a").alias("a", metadata={})])
+        self.assertEqual(df.schema["a"].metadata, {})
+
+        df = df.withMetadata("a", {"baz": "burr"})
+        self.assertEqual(df.schema["a"].metadata, {"baz": "burr"})
+
+        df = df.withMetadata("a", {})
+        self.assertEqual(df.schema["a"].metadata, {})
 
     def test_column_regexp(self) -> None:
         # SPARK-41438: test dataframe.colRegex()
@@ -1230,8 +1246,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DICT",
-            message_parameters={
+            errorClass="NOT_DICT",
+            messageParameters={
                 "arg_name": "metadata",
                 "arg_type": "list",
             },
@@ -1398,6 +1414,66 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(verify_col_name("`m```.`s.s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.`v`", cdf.schema))
 
+    def test_truncate_message(self):
+        cdf1 = self.connect.createDataFrame(
+            [
+                ("a B c"),
+                ("X y Z"),
+            ],
+            ["a" * 4096],
+        )
+        plan1 = cdf1._plan.to_proto(self.connect._client)
+
+        proto_string_1 = self.connect._client._proto_to_string(plan1, False)
+        self.assertTrue(len(proto_string_1) > 10000, len(proto_string_1))
+        proto_string_truncated_1 = self.connect._client._proto_to_string(plan1, True)
+        self.assertTrue(len(proto_string_truncated_1) < 4000, len(proto_string_truncated_1))
+
+        cdf2 = cdf1.select("a" * 4096, "a" * 4096, "a" * 4096)
+        plan2 = cdf2._plan.to_proto(self.connect._client)
+
+        proto_string_2 = self.connect._client._proto_to_string(plan2, False)
+        self.assertTrue(len(proto_string_2) > 20000, len(proto_string_2))
+        proto_string_truncated_2 = self.connect._client._proto_to_string(plan2, True)
+        self.assertTrue(len(proto_string_truncated_2) < 8000, len(proto_string_truncated_2))
+
+        cdf3 = cdf1.select("a" * 4096)
+        for _ in range(64):
+            cdf3 = cdf3.select("a" * 4096)
+        plan3 = cdf3._plan.to_proto(self.connect._client)
+
+        proto_string_3 = self.connect._client._proto_to_string(plan3, False)
+        self.assertTrue(len(proto_string_3) > 128000, len(proto_string_3))
+        proto_string_truncated_3 = self.connect._client._proto_to_string(plan3, True)
+        self.assertTrue(len(proto_string_truncated_3) < 64000, len(proto_string_truncated_3))
+
+    def test_plan_compression(self):
+        self.assertTrue(self.connect._client._zstd_module is not None)
+        self.connect.range(1).count()
+        default_plan_compression_threshold = self.connect._client._plan_compression_threshold
+        self.assertTrue(default_plan_compression_threshold > 0)
+        self.assertTrue(self.connect._client._plan_compression_algorithm == "ZSTD")
+        try:
+            self.connect._client._plan_compression_threshold = 1000
+
+            # Small plan should not be compressed
+            cdf1 = self.connect.range(1).select(CF.lit("Apache Spark"))
+            plan1 = cdf1._plan.to_proto(self.connect._client)
+            self.assertTrue(plan1.root is not None)
+            self.assertTrue(cdf1.count() == 1)
+
+            # Large plan should be compressed
+            cdf2 = self.connect.range(1).select(CF.lit("Apache Spark" * 1000))
+            plan2 = cdf2._plan.to_proto(self.connect._client)
+            self.assertTrue(plan2.compressed_operation is not None)
+            # Test compressed relation
+            self.assertTrue(cdf2.count() == 1)
+            # Test compressed command
+            cdf2.createOrReplaceTempView("temp_view_cdf2")
+            self.assertTrue(self.connect.sql("SELECT * FROM temp_view_cdf2").count() == 1)
+        finally:
+            self.connect._client._plan_compression_threshold = default_plan_compression_threshold
+
 
 class SparkConnectGCTests(SparkConnectSQLTestCase):
     @classmethod
@@ -1483,6 +1559,75 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
         gc.collect()
 
         eventually(catch_assertions=True)(condition)()
+
+    def test_arrow_batch_result_chunking(self):
+        # Two cases are tested here:
+        # (a) client preferred chunk size is set: the server should respect it
+        # (b) client preferred chunk size is not set: the server should use its own max chunk size
+        for preferred_chunk_size_optional, max_chunk_size_optional in ((1024, None), (None, 1024)):
+            sql_query = "select id, CAST(id + 0.5 AS DOUBLE) from range(0, 2000, 1, 4)"
+            cdf = self.connect.sql(sql_query)
+            sdf = self.spark.sql(sql_query)
+
+            original_verify_response_integrity = self.connect._client._verify_response_integrity
+            captured_chunks = []
+
+            def patched_verify_response_integrity(response):
+                original_verify_response_integrity(response)
+                if isinstance(response, ExecutePlanResponse) and response.HasField("arrow_batch"):
+                    captured_chunks.append(response.arrow_batch)
+
+            try:
+                # Patch the response verifier for testing to access the chunked arrow batch
+                # responses.
+                self.connect._client._verify_response_integrity = patched_verify_response_integrity
+                # Override the chunk size to 1024 bytes for testing
+                if preferred_chunk_size_optional:
+                    self.connect._client._preferred_arrow_chunk_size = preferred_chunk_size_optional
+                if max_chunk_size_optional:
+                    self.connect.conf.set(
+                        "spark.connect.session.resultChunking.maxChunkSize",
+                        max_chunk_size_optional,
+                    )
+
+                # Execute the query, and assert the results are correct.
+                self.assertEqual(cdf.collect(), sdf.collect())
+
+                # Verify the metadata of arrow batch chunks.
+                def split_into_batches(chunks):
+                    batches = []
+                    i = 0
+                    n = len(chunks)
+                    while i < n:
+                        num_chunks = chunks[i].num_chunks_in_batch
+                        batch = chunks[i : i + num_chunks]
+                        batches.append(batch)
+                        i += num_chunks
+                    return batches
+
+                batches = split_into_batches(captured_chunks)
+                # There are 4 batches (partitions) in total.
+                self.assertEqual(len(batches), 4)
+                for batch in batches:
+                    # In this example, the max chunk size is set to a small value, so each Arrow
+                    # batch should be split into multiple chunks.
+                    self.assertTrue(len(batch) > 5)
+                    row_count = batch[0].row_count
+                    row_start_offset = batch[0].start_offset
+                    for i, chunk in enumerate(batch):
+                        self.assertEqual(chunk.chunk_index, i)
+                        self.assertEqual(chunk.num_chunks_in_batch, len(batch))
+                        self.assertEqual(chunk.row_count, row_count)
+                        self.assertEqual(chunk.start_offset, row_start_offset)
+                        self.assertTrue(len(chunk.data) > 0)
+                        self.assertTrue(
+                            len(chunk.data)
+                            <= (preferred_chunk_size_optional or max_chunk_size_optional)
+                        )
+            finally:
+                self.connect._client._verify_response_integrity = original_verify_response_integrity
+                self.connect._client._preferred_arrow_chunk_size = None
+                self.connect.conf.unset("spark.connect.session.resultChunking.maxChunkSize")
 
 
 if __name__ == "__main__":

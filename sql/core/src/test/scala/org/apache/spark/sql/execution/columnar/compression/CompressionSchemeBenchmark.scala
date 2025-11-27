@@ -91,7 +91,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
 
     schemes.filter(_.supports(tpe)).foreach { scheme =>
       val (compressFunc, compressionRatio, buf) = prepareEncodeInternal(count, tpe, scheme, input)
-      val label = s"${getFormattedClassName(scheme)}(${compressionRatio.formatted("%.3f")})"
+      val label = s"${getFormattedClassName(scheme)}(${"%.3f".format(compressionRatio)})"
 
       benchmark.addCase(label)({ i: Int =>
         for (n <- 0L until iters) {
@@ -222,7 +222,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     val testData = allocateLocal(count * (4 + strLen))
 
     val g = {
-      val dataTable = (0 until tableSize).map(_ => RandomStringUtils.randomAlphabetic(strLen))
+      val dataTable = (0 until tableSize).map(_ => RandomStringUtils.secure.nextAlphabetic(strLen))
       val rng = genHigherSkewData()
       () => dataTable(rng().toInt % tableSize)
     }

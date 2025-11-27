@@ -29,6 +29,9 @@ from pyspark.sql import Row
 from pyspark.sql import functions as F
 from pyspark.errors import (
     AnalysisException,
+    IllegalArgumentException,
+    SparkRuntimeException,
+    ParseException,
     PySparkTypeError,
     PySparkValueError,
     PySparkRuntimeError,
@@ -41,6 +44,7 @@ from pyspark.sql.types import (
     IntegerType,
     FloatType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
@@ -49,6 +53,8 @@ from pyspark.sql.types import (
     MapType,
     StringType,
     CharType,
+    Geography,
+    Geometry,
     VarcharType,
     StructType,
     StructField,
@@ -58,6 +64,8 @@ from pyspark.sql.types import (
     DecimalType,
     BinaryType,
     BooleanType,
+    GeographyType,
+    GeometryType,
     NullType,
     VariantType,
     VariantVal,
@@ -70,14 +78,14 @@ from pyspark.sql.types import (
     _make_type_verifier,
     _merge_type,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.objects import (
     ExamplePointUDT,
     PythonOnlyUDT,
     ExamplePoint,
     PythonOnlyPoint,
     MyObject,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkErrorTestUtils
 
 
@@ -133,8 +141,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
         df = self.spark.createDataFrame(rdd)
@@ -182,6 +190,7 @@ class TypesTestsMixin:
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.time(hour=1, minute=2, second=3),
             datetime.timedelta(microseconds=123456678),
             1.0,
             array.array("d", [1]),
@@ -205,6 +214,7 @@ class TypesTestsMixin:
             "string",
             "date",
             "timestamp",
+            "time(6)",
             "interval day to second",
             "double",
             "array<double>",
@@ -228,6 +238,7 @@ class TypesTestsMixin:
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.time(hour=1, minute=2, second=3),
             datetime.timedelta(microseconds=123456678),
             1.0,
             [1.0],
@@ -476,6 +487,25 @@ class TypesTestsMixin:
             df.first(),
         )
 
+    def test_infer_variant_type(self):
+        # SPARK-52355: Test inferring variant type
+        value = VariantVal.parseJson('{"a": 1}')
+
+        data = [Row(f1=value)]
+        df = self.spark.createDataFrame(data)
+        actual = df.first()["f1"]
+
+        self.assertEqual(type(df.schema["f1"].dataType), VariantType)
+        # As of writing VariantVal can also include bytearray
+        self.assertEqual(
+            bytes(actual.value),
+            bytes(value.value),
+        )
+        self.assertEqual(
+            bytes(actual.metadata),
+            bytes(value.metadata),
+        )
+
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
@@ -505,7 +535,7 @@ class TypesTestsMixin:
         self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_apply_schema(self):
-        from datetime import date, datetime, timedelta
+        from datetime import date, time, datetime, timedelta
 
         rdd = self.sc.parallelize(
             [
@@ -517,6 +547,7 @@ class TypesTestsMixin:
                     2147483647,
                     1.0,
                     date(2010, 1, 1),
+                    time(23, 23, 59, 999999),
                     datetime(2010, 1, 1, 1, 1, 1),
                     timedelta(days=1),
                     {"a": 1},
@@ -535,6 +566,7 @@ class TypesTestsMixin:
                 StructField("int1", IntegerType(), False),
                 StructField("float1", FloatType(), False),
                 StructField("date1", DateType(), False),
+                StructField("time", TimeType(), False),
                 StructField("time1", TimestampType(), False),
                 StructField("daytime1", DayTimeIntervalType(), False),
                 StructField("map1", MapType(StringType(), IntegerType(), False), False),
@@ -553,6 +585,7 @@ class TypesTestsMixin:
                 x.int1,
                 x.float1,
                 x.date1,
+                x.time,
                 x.time1,
                 x.daytime1,
                 x.map1["a"],
@@ -569,6 +602,7 @@ class TypesTestsMixin:
             2147483647,
             1.0,
             date(2010, 1, 1),
+            time(23, 23, 59, 999999),
             datetime(2010, 1, 1, 1, 1, 1),
             timedelta(days=1),
             1,
@@ -612,10 +646,27 @@ class TypesTestsMixin:
         self.assertEqual(df.count(), 1)
         self.assertEqual(df.head(), Row(name="[123]", income=120))
 
+    def test_string_type_simple_string(self):
+        self.assertEqual(StringType().simpleString(), "string")
+        self.assertEqual(StringType("UTF8_BINARY").simpleString(), "string")
+        self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
+        self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
+
     def test_schema_with_collations_json_ser_de(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
         unicode_collation = "UNICODE"
+        utf8_lcase_collation = "UTF8_LCASE"
+
+        standalone_string = StringType(unicode_collation)
+
+        standalone_array = ArrayType(StringType(unicode_collation))
+
+        standalone_map = MapType(StringType(utf8_lcase_collation), StringType(unicode_collation))
+
+        standalone_nested = ArrayType(
+            MapType(StringType(utf8_lcase_collation), ArrayType(StringType(unicode_collation)))
+        )
 
         simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
 
@@ -687,6 +738,10 @@ class TypesTestsMixin:
         )
 
         schemas = [
+            standalone_string,
+            standalone_array,
+            standalone_map,
+            standalone_nested,
             simple_struct,
             nested_struct,
             array_in_schema,
@@ -817,6 +872,38 @@ class TypesTestsMixin:
             PySparkTypeError, lambda: _parse_datatype_json_string(collations_in_nested_map_json)
         )
 
+    def test_array_type_from_json(self):
+        arrayWithoutCollations = ArrayType(StringType(), True)
+        arrayWithCollations = ArrayType(StringType("UNICODE"), True)
+        array_json = {"type": "array", "elementType": "string", "containsNull": True}
+        collationsMap = {"element": "UNICODE"}
+
+        self.assertEqual(arrayWithoutCollations, ArrayType.fromJson(array_json))
+        self.assertEqual(
+            arrayWithCollations,
+            ArrayType.fromJson(array_json, fieldPath="", collationsMap=collationsMap),
+        )
+        self.assertEqual(
+            arrayWithCollations, ArrayType.fromJson(array_json, collationsMap=collationsMap)
+        )
+
+    def test_map_type_from_json(self):
+        mapWithoutCollations = MapType(StringType(), StringType(), True)
+        mapWithCollations = MapType(StringType("UNICODE"), StringType("UNICODE"), True)
+        map_json = {
+            "type": "map",
+            "keyType": "string",
+            "valueType": "string",
+            "valueContainsNull": True,
+        }
+        collationsMap = {"key": "UNICODE", "value": "UNICODE"}
+
+        self.assertEqual(mapWithoutCollations, MapType.fromJson(map_json))
+        self.assertEqual(
+            mapWithCollations, MapType.fromJson(map_json, fieldPath="", collationsMap=collationsMap)
+        )
+        self.assertEqual(mapWithCollations, MapType.fromJson(map_json, collationsMap=collationsMap))
+
     def test_schema_with_bad_collations_provider(self):
         from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
 
@@ -839,6 +926,98 @@ class TypesTestsMixin:
         """
 
         self.assertRaises(PySparkValueError, lambda: _parse_datatype_json_string(schema_json))
+
+    def test_geography_json_serde(self):
+        from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
+
+        valid_test_cases = [
+            ("geography", GeographyType(4326)),
+            ("geography(OGC:CRS84)", GeographyType(4326)),
+            ("geography(OGC:CRS84, SPHERICAL)", GeographyType(4326)),
+            ("geography(SPHERICAL)", GeographyType(4326)),
+            ("geography(SRID:ANY)", GeographyType("ANY")),
+            ("geography(srid:any)", GeographyType("ANY")),
+        ]
+        for json, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json)
+            self.assertEqual(python_datatype, expected)
+            self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
+
+        invalid_test_cases = [
+            "geography()",
+            "geography(())",
+            "geography(0)",
+            "geography(1)",
+            "geography(3857)",
+            "geography(4326)",
+            "geography(ANY)",
+            "geography(any)",
+            "geography(SRID)",
+            "geography(srid)",
+            "geography(CRS)",
+            "geography(crs)",
+            "geography(asdf)",
+            "geography(asdf:fdsa)",
+            "geography(123:123)",
+            "geography(srid:srid)",
+            "geography(SRID:0)",
+            "geography(SRID:1)",
+            "geography(SRID:123)",
+            "geography(EPSG:123)",
+            "geography(ESRI:123)",
+            "geography(OCG:123)",
+            "geography(OCG:CRS123)",
+            "geography(SRID:0,)",
+            "geography(SRID0)",
+            "geography(SRID:4326, ALG)",
+        ]
+        for json in invalid_test_cases:
+            with self.assertRaises(Exception):
+                _parse_datatype_json_value(json)
+
+    def test_geometry_json_serde(self):
+        from pyspark.sql.types import _parse_datatype_json_value, _parse_datatype_json_string
+
+        valid_test_cases = [
+            ("geometry", GeometryType(4326)),
+            ("geometry(OGC:CRS84)", GeometryType(4326)),
+            ("geometry(SRID:ANY)", GeometryType("ANY")),
+            ("geometry(srid:any)", GeometryType("ANY")),
+        ]
+        for json, expected in valid_test_cases:
+            python_datatype = _parse_datatype_json_value(json)
+            self.assertEqual(python_datatype, expected)
+            self.assertEqual(expected, _parse_datatype_json_string(expected.json()))
+
+        invalid_test_cases = [
+            "geometry()",
+            "geometry(())",
+            "geometry(0)",
+            "geometry(1)",
+            "geometry(3857)",
+            "geometry(4326)",
+            "geometry(ANY)",
+            "geometry(any)",
+            "geometry(SRID)",
+            "geometry(srid)",
+            "geometry(CRS)",
+            "geometry(crs)",
+            "geometry(asdf)",
+            "geometry(asdf:fdsa)",
+            "geometry(123:123)",
+            "geometry(srid:srid)",
+            "geometry(SRID:1)",
+            "geometry(SRID:123)",
+            "geometry(EPSG:123)",
+            "geometry(ESRI:123)",
+            "geometry(OCG:123)",
+            "geometry(OCG:CRS123)",
+            "geometry(SRID:0,)",
+            "geometry(SRID0)",
+        ]
+        for json in invalid_test_cases:
+            with self.assertRaises(Exception):
+                _parse_datatype_json_value(json)
 
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
@@ -911,6 +1090,9 @@ class TypesTestsMixin:
         udf = F.udf(lambda k, v: [(k, v[0])], ArrayType(df.schema))
         gd.select(udf(*gd)).collect()
 
+        arrow_udf = F.udf(lambda k, v: [(k, v[0])], ArrayType(df.schema), useArrow=True)
+        gd.select(arrow_udf(*gd)).collect()
+
     def test_udt_with_none(self):
         df = self.spark.range(0, 10, 1, 1)
 
@@ -918,9 +1100,10 @@ class TypesTestsMixin:
             if x > 0:
                 return PythonOnlyPoint(float(x), float(x))
 
-        self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
-        rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
-        self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
+        with self.temp_func("udf"):
+            self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
+            rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
+            self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
 
     def test_infer_schema_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
@@ -1015,19 +1198,34 @@ class TypesTestsMixin:
         self.assertEqual(points, [PythonOnlyPoint(1.0, 2.0), None])
 
     def test_udf_with_udt(self):
+        # UDT input
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
         udf = F.udf(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
+        arrow_udf = F.udf(lambda p: p.y, DoubleType(), useArrow=True)
+        self.assertEqual(2.0, df.select(arrow_udf(df.point)).first()[0])
+
         udf2 = F.udf(lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT())
         self.assertEqual(ExamplePoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
+        arrow_udf2 = F.udf(
+            lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT(), useArrow=True
+        )
+        self.assertEqual(ExamplePoint(2.0, 3.0), df.select(arrow_udf2(df.point)).first()[0])
 
         row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
         udf = F.udf(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
+        arrow_udf = F.udf(lambda p: p.y, DoubleType(), useArrow=True)
+        self.assertEqual(2.0, df.select(arrow_udf(df.point)).first()[0])
+
         udf2 = F.udf(lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT())
         self.assertEqual(PythonOnlyPoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
+        arrow_udf2 = F.udf(
+            lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT(), useArrow=True
+        )
+        self.assertEqual(PythonOnlyPoint(2.0, 3.0), df.select(arrow_udf2(df.point)).first()[0])
 
     def test_rdd_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
@@ -1165,9 +1363,15 @@ class TypesTestsMixin:
             IntegerType(),
             LongType(),
             DateType(),
+            TimeType(5),
             TimestampType(),
             TimestampNTZType(),
             NullType(),
+            GeographyType(4326),
+            GeographyType("ANY"),
+            GeometryType(0),
+            GeometryType(4326),
+            GeometryType("ANY"),
             VariantType(),
             YearMonthIntervalType(),
             YearMonthIntervalType(YearMonthIntervalType.YEAR),
@@ -1215,6 +1419,8 @@ class TypesTestsMixin:
             _parse_datatype_string("a INT, c DOUBLE"),
         )
         self.assertEqual(VariantType(), _parse_datatype_string("variant"))
+        self.assertEqual(TimeType(5), _parse_datatype_string("time(5)"))
+        self.assertEqual(TimeType(), _parse_datatype_string("time( 6 )"))
 
     def test_tree_string(self):
         schema1 = DataType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
@@ -1467,6 +1673,7 @@ class TypesTestsMixin:
             .add("bin", BinaryType())
             .add("bool", BooleanType())
             .add("date", DateType())
+            .add("time", TimeType())
             .add("ts", TimestampType())
             .add("ts_ntz", TimestampNTZType())
             .add("dec", DecimalType(10, 2))
@@ -1502,6 +1709,7 @@ class TypesTestsMixin:
                 " |-- bin: binary (nullable = true)",
                 " |-- bool: boolean (nullable = true)",
                 " |-- date: date (nullable = true)",
+                " |-- time: time(6) (nullable = true)",
                 " |-- ts: timestamp (nullable = true)",
                 " |-- ts_ntz: timestamp_ntz (nullable = true)",
                 " |-- dec: decimal(10,2) (nullable = true)",
@@ -1601,8 +1809,8 @@ class TypesTestsMixin:
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1619,8 +1827,8 @@ class TypesTestsMixin:
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), DoubleType()))
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1637,8 +1845,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1678,8 +1886,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1721,8 +1929,8 @@ class TypesTestsMixin:
             )
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": "LongType", "data_type2": "DoubleType"},
         )
 
         self.assertEqual(
@@ -1832,8 +2040,8 @@ class TypesTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
-                message_parameters={"field_name": "myarray"},
+                errorClass="CANNOT_INFER_TYPE_FOR_FIELD",
+                messageParameters={"field_name": "myarray"},
             )
 
     def test_repr(self):
@@ -1849,6 +2057,7 @@ class TypesTestsMixin:
             BinaryType(),
             BooleanType(),
             DateType(),
+            TimeType(),
             TimestampType(),
             DecimalType(),
             DoubleType(),
@@ -1866,6 +2075,44 @@ class TypesTestsMixin:
         ]
         for instance in instances:
             self.assertEqual(eval(repr(instance)), instance)
+
+    def test_hashable(self):
+        for dt in [
+            NullType(),
+            StringType(),
+            StringType("UTF8_BINARY"),
+            StringType("UTF8_LCASE"),
+            StringType("UNICODE"),
+            StringType("UNICODE_CI"),
+            CharType(10),
+            VarcharType(10),
+            BinaryType(),
+            BooleanType(),
+            DateType(),
+            TimeType(),
+            TimestampType(),
+            TimestampNTZType(),
+            TimeType(),
+            DecimalType(),
+            DoubleType(),
+            FloatType(),
+            ByteType(),
+            IntegerType(),
+            LongType(),
+            ShortType(),
+            DayTimeIntervalType(),
+            YearMonthIntervalType(),
+            CalendarIntervalType(),
+            ArrayType(StringType()),
+            MapType(StringType(), IntegerType()),
+            StructField("f1", StringType(), True),
+            StructType([StructField("f1", StringType(), True)]),
+            VariantType(),
+            GeometryType(0),
+            GeographyType(4326),
+            ExamplePointUDT(),
+        ]:
+            _ = hash(dt)
 
     def test_daytime_interval_type_constructor(self):
         # SPARK-37277: Test constructors in day time interval.
@@ -1885,8 +2132,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "None", "end_field": "3"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "None", "end_field": "3"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1894,8 +2141,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "123", "end_field": "123"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "123", "end_field": "123"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1903,8 +2150,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "0", "end_field": "321"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "0", "end_field": "321"},
         )
 
     def test_daytime_interval_type(self):
@@ -1972,8 +2219,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "None", "end_field": "3"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "None", "end_field": "3"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1981,8 +2228,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "123", "end_field": "123"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "123", "end_field": "123"},
         )
 
         with self.assertRaises(PySparkRuntimeError) as pe:
@@ -1990,8 +2237,8 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_INTERVAL_CASTING",
-            message_parameters={"start_field": "0", "end_field": "321"},
+            errorClass="INVALID_INTERVAL_CASTING",
+            messageParameters={"start_field": "0", "end_field": "321"},
         )
 
     def test_yearmonth_interval_type(self):
@@ -2201,6 +2448,400 @@ class TypesTestsMixin:
             PySparkValueError, lambda: str(VariantVal(bytes([32, 10, 1, 0, 0, 0]), metadata))
         )
 
+        # check parse_json
+        for key, json, obj in expected_values:
+            self.assertEqual(VariantVal.parseJson(json).toJson(), json)
+            self.assertEqual(VariantVal.parseJson(json).toPython(), obj)
+
+        # compare the parse_json in Spark vs python. `json_str` contains all of `expected_values`.
+        parse_json_spark_output = variants[0]
+        parse_json_python_output = VariantVal.parseJson(json_str)
+        self.assertEqual(parse_json_spark_output.value, parse_json_python_output.value)
+        self.assertEqual(parse_json_spark_output.metadata, parse_json_python_output.metadata)
+
+        # Test createDataFrame
+        create_df_variants = self.spark.createDataFrame(
+            [
+                (
+                    VariantVal.parseJson("2"),
+                    [VariantVal.parseJson("3")],
+                    {"v": VariantVal.parseJson("4")},
+                    {"v": VariantVal.parseJson("5")},
+                ),
+                (None, [None], {"v": None}, {"v": None}),
+                (None, None, None, None),
+            ],
+            "v variant, a array<variant>, s struct<v variant>, m map<string, variant>",
+        ).collect()
+        self.assertEqual(create_df_variants[0][0].toJson(), "2")
+        self.assertEqual(create_df_variants[0][1][0].toJson(), "3")
+        self.assertEqual(create_df_variants[0][2][0].toJson(), "4")
+        self.assertEqual(create_df_variants[0][3]["v"].toJson(), "5")
+        self.assertEqual(create_df_variants[1][0], None)
+        self.assertEqual(create_df_variants[1][1][0], None)
+        self.assertEqual(create_df_variants[1][2][0], None)
+        self.assertEqual(create_df_variants[1][3]["v"], None)
+        self.assertEqual(create_df_variants[2][0], None)
+        self.assertEqual(create_df_variants[2][1], None)
+        self.assertEqual(create_df_variants[2][2], None)
+        self.assertEqual(create_df_variants[2][3], None)
+
+        # Rows in createDataFrame cannot be of type VariantVal
+        with self.assertRaises(PySparkValueError, msg="Rows cannot be of type VariantVal"):
+            self.spark.createDataFrame([VariantVal.parseJson("2")], "v variant")
+
+    def test_variant_to_pandas(self):
+        import pandas as pd
+        import json
+
+        expected_values = [
+            ("str", '"%s"' % ("0123456789" * 10), "0123456789" * 10),
+            ("short_str", '"abc"', "abc"),
+        ]
+        json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
+        df = self.spark.createDataFrame([({"json": json_str})])
+        df_variant = df.select(F.parse_json(df.json).alias("v"))
+        pandas = df_variant.toPandas()
+        test_record = json.loads(pandas["v"].iloc[0].toJson())
+        self.assertIsInstance(pandas, pd.DataFrame)
+        self.assertEqual(expected_values[0][2], test_record["str"])
+        self.assertEqual(expected_values[1][2], test_record["short_str"])
+
+    def test_geospatial_encoding(self):
+        df = self.spark.createDataFrame(
+            [
+                (
+                    bytes.fromhex("0101000000000000000000F03F0000000000000040"),
+                    4326,
+                )
+            ],
+            ["wkb", "srid"],
+        )
+        row = df.select(
+            F.st_geomfromwkb(df.wkb).alias("geom"),
+            F.st_geogfromwkb(df.wkb).alias("geog"),
+        ).collect()[0]
+
+        self.assertEqual(type(row["geom"]), Geometry)
+        self.assertEqual(type(row["geog"]), Geography)
+        self.assertEqual(
+            row["geom"].getBytes(), bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        )
+        self.assertEqual(row["geom"].getSrid(), 0)
+        self.assertEqual(
+            row["geog"].getBytes(), bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        )
+        self.assertEqual(row["geog"].getSrid(), 4326)
+
+    def test_geospatial_create_dataframe_rdd(self):
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("geom", GeometryType(0), True),
+                StructField("geom4326", GeometryType(4326), True),
+                StructField("geog", GeographyType(4326), True),
+            ]
+        )
+        geospatial_data = [
+            (
+                1,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+            ),
+            (
+                2,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+            ),
+        ]
+        rdd_data = self.sc.parallelize(geospatial_data)
+        df = self.spark.createDataFrame(rdd_data, schema)
+        rows = df.select(
+            F.st_asbinary(df.geom).alias("geom_wkb"),
+            F.st_srid(df.geom).alias("geom_srid"),
+            F.st_asbinary(df.geom4326).alias("geom4326_wkb"),
+            F.st_srid(df.geom4326).alias("geom4326_srid"),
+            F.st_asbinary(df.geog).alias("geog_wkb"),
+            F.st_srid(df.geog).alias("geog_srid"),
+        ).collect()
+
+        point0_wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        point1_wkb = bytes.fromhex("010100000000000000000014400000000000001440")
+        self.assertEqual(rows[0]["geom_wkb"], point0_wkb)
+        self.assertEqual(rows[0]["geom4326_wkb"], point0_wkb)
+        self.assertEqual(rows[0]["geog_wkb"], point0_wkb)
+        self.assertEqual(rows[1]["geom_wkb"], point1_wkb)
+        self.assertEqual(rows[1]["geom4326_wkb"], point1_wkb)
+        self.assertEqual(rows[1]["geog_wkb"], point1_wkb)
+        self.assertEqual(rows[0]["geom_srid"], 0)
+        self.assertEqual(rows[0]["geom4326_srid"], 4326)
+        self.assertEqual(rows[0]["geog_srid"], 4326)
+        self.assertEqual(rows[1]["geom_srid"], 0)
+        self.assertEqual(rows[1]["geom4326_srid"], 4326)
+        self.assertEqual(rows[1]["geog_srid"], 4326)
+        schema_df = self.spark.createDataFrame(rdd_data).select(
+            F.col("_1").alias("id"),
+            F.col("_2").alias("geom"),
+            F.col("_3").alias("geom4326"),
+            F.col("_4").alias("geog"),
+        )
+        self.assertEqual(df.collect(), schema_df.collect())
+
+    def test_geospatial_create_dataframe(self):
+        # Positive Test: Creating DataFrame from a list of tuples with explicit schema
+        geospatial_data = [
+            (
+                1,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+            ),
+            (
+                2,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+            ),
+        ]
+        named_geospatial_data = [
+            {
+                "id": 1,
+                "geom": Geometry.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 0
+                ),
+                "geom4326": Geometry.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+                "geog": Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+            },
+            {
+                "id": 2,
+                "geom": Geometry.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 0
+                ),
+                "geom4326": Geometry.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+                "geog": Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+            },
+        ]
+        GeospatialRow = Row("id", "geom", "geom4326", "geog")
+        spark_row_data = [
+            GeospatialRow(
+                1,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000031400000000000001c40"), 4326
+                ),
+            ),
+            GeospatialRow(
+                2,
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 0),
+                Geometry.fromWKB(bytes.fromhex("010100000000000000000014400000000000001440"), 4326),
+                Geography.fromWKB(
+                    bytes.fromhex("010100000000000000000014400000000000001440"), 4326
+                ),
+            ),
+        ]
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("geom", GeometryType(0), True),
+                StructField("geom4326", GeometryType(4326), True),
+                StructField("geog", GeographyType(4326), True),
+            ]
+        )
+        # Negative Test: Schema mismatch
+        mismatched_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),  # Should be GeometryType
+                StructField("geom", GeometryType(4326), True),  # Should be GeometryType
+                StructField("geom4326", GeometryType(4326), True),  # Should be GeometryType
+                StructField("geog", GeographyType(4326), True),  # Should be GeographyType
+            ]
+        )
+
+        # Explicitly validate single test case
+        # rest will be compared with this one.
+        df = self.spark.createDataFrame(geospatial_data, schema)
+        rows = df.select(
+            F.st_asbinary(df.geom).alias("geom_wkb"),
+            F.st_srid(df.geom).alias("geom_srid"),
+            F.st_asbinary(df.geom4326).alias("geom4326_wkb"),
+            F.st_srid(df.geom4326).alias("geom4326_srid"),
+            F.st_asbinary(df.geog).alias("geog_wkb"),
+            F.st_srid(df.geog).alias("geog_srid"),
+        ).collect()
+
+        point0_wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        point1_wkb = bytes.fromhex("010100000000000000000014400000000000001440")
+        self.assertEqual(rows[0]["geom_wkb"], point0_wkb)
+        self.assertEqual(rows[0]["geom4326_wkb"], point0_wkb)
+        self.assertEqual(rows[0]["geog_wkb"], point0_wkb)
+        self.assertEqual(rows[1]["geom_wkb"], point1_wkb)
+        self.assertEqual(rows[1]["geom4326_wkb"], point1_wkb)
+        self.assertEqual(rows[1]["geog_wkb"], point1_wkb)
+        self.assertEqual(rows[0]["geom_srid"], 0)
+        self.assertEqual(rows[0]["geom4326_srid"], 4326)
+        self.assertEqual(rows[0]["geog_srid"], 4326)
+        self.assertEqual(rows[1]["geom_srid"], 0)
+        self.assertEqual(rows[1]["geom4326_srid"], 4326)
+        self.assertEqual(rows[1]["geog_srid"], 4326)
+
+        # Just the data set without parameters.
+        self.assertEqual(
+            self.spark.createDataFrame(named_geospatial_data)
+            .select("id", "geom", "geom4326", "geog")
+            .collect(),
+            df.collect(),
+        )
+        self.assertEqual(self.spark.createDataFrame(geospatial_data).collect(), df.collect())
+        self.assertEqual(self.spark.createDataFrame(spark_row_data).collect(), df.collect())
+
+        # Define DataFrame creation methods
+        datasets = [named_geospatial_data, geospatial_data, spark_row_data]
+        schemas = [
+            schema,
+            "id INT, geom GEOMETRY(0), geom4326 GEOMETRY(4326), geog GEOGRAPHY(4326)",
+            ["id", "geom", "geom4326", "geog"],
+        ]
+
+        for dataset_to_check, schema_to_check in zip(datasets, schemas):
+            df_to_check = self.spark.createDataFrame(dataset_to_check, schema_to_check).select(
+                "id", "geom", "geom4326", "geog"
+            )
+            self.assertEqual(df_to_check.collect(), df.collect(), "DataFrame creation with schema")
+
+        # Negative Test: Schema mismatch
+        for dataset_to_check in datasets:
+            with self.assertRaises(SparkRuntimeException) as pe:
+                self.spark.createDataFrame(dataset_to_check, mismatched_schema).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="GEO_ENCODER_SRID_MISMATCH_ERROR",
+                messageParameters={"type": "GEOMETRY", "typeSrid": "4326", "valueSrid": "0"},
+            )
+
+    def test_geospatial_schema_inferrence(self):
+        # Mixed data with different SRIDs
+        wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        geometry_dataset = [
+            (Geometry.fromWKB(wkb, 0), Geometry.fromWKB(wkb, 4326), Geometry.fromWKB(wkb, 4326)),
+            (Geometry.fromWKB(wkb, 0), Geometry.fromWKB(wkb, 4326), Geometry.fromWKB(wkb, 0)),
+            (Geometry.fromWKB(wkb, 0), Geometry.fromWKB(wkb, 4326), Geometry.fromWKB(wkb, 4326)),
+            (Geometry.fromWKB(wkb, 0), Geometry.fromWKB(wkb, 4326), Geometry.fromWKB(wkb, 0)),
+        ]
+        # Create DataFrame with mixed data types
+        df = self.spark.createDataFrame(geometry_dataset, ["geom0", "geom4326", "geom_any"])
+        expected_schema = StructType(
+            [
+                StructField("geom0", GeometryType(0), True),
+                StructField("geom4326", GeometryType(4326), True),
+                StructField("geom_any", GeometryType("ANY"), True),
+            ]
+        )
+        self.assertEqual(df.schema, expected_schema)
+
+        rows = df.select(
+            F.st_asbinary("geom0").alias("geom0_wkb"),
+            F.st_srid("geom0").alias("geom0_srid"),
+            F.st_asbinary("geom4326").alias("geom4326_wkb"),
+            F.st_srid("geom4326").alias("geom4326_srid"),
+            F.st_asbinary("geom_any").alias("geom_any_wkb"),
+            F.st_srid("geom_any").alias("geom_any_srid"),
+        ).collect()
+
+        point_wkb = bytes.fromhex("010100000000000000000031400000000000001c40")
+        self.assertEqual(rows[0]["geom0_wkb"], point_wkb)
+        self.assertEqual(rows[1]["geom0_wkb"], point_wkb)
+        self.assertEqual(rows[0]["geom4326_wkb"], point_wkb)
+        self.assertEqual(rows[1]["geom4326_wkb"], point_wkb)
+        self.assertEqual(rows[0]["geom_any_wkb"], point_wkb)
+        self.assertEqual(rows[1]["geom_any_wkb"], point_wkb)
+        self.assertEqual(rows[0]["geom0_srid"], 0)
+        self.assertEqual(rows[1]["geom0_srid"], 0)
+        self.assertEqual(rows[0]["geom4326_srid"], 4326)
+        self.assertEqual(rows[1]["geom4326_srid"], 4326)
+        self.assertEqual(rows[0]["geom_any_srid"], 4326)
+        self.assertEqual(rows[1]["geom_any_srid"], 0)
+
+    def test_geospatial_mixed_check_srid_validity(self):
+        geometry_mixed_invalid_data = [
+            (1, Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 0)),
+            (2, Geometry.fromWKB(bytes.fromhex("010100000000000000000031400000000000001c40"), 1)),
+        ]
+
+        with self.assertRaises(IllegalArgumentException) as pe:
+            self.spark.createDataFrame(geometry_mixed_invalid_data).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="ST_INVALID_SRID_VALUE",
+            messageParameters={"srid": "1"},
+        )
+
+        with self.assertRaises(IllegalArgumentException) as pe:
+            self.spark.createDataFrame(
+                geometry_mixed_invalid_data, "id INT, geom GEOMETRY(ANY)"
+            ).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="ST_INVALID_SRID_VALUE",
+            messageParameters={"srid": "1"},
+        )
+
+    def test_geospatial_result_encoding(self):
+        point_wkb = "010100000000000000000031400000000000001c40"
+        point_bytes = bytes.fromhex(point_wkb)
+        df = self.spark.sql(
+            f"""
+            SELECT ST_GeomFromWKB(X'{point_wkb}') AS geom,
+            ST_GeogFromWKB(X'{point_wkb}') AS geog"""
+        )
+        GeospatialRow = Row("geom", "geog")
+        self.assertEqual(
+            df.collect(),
+            [
+                GeospatialRow(
+                    Geometry.fromWKB(point_bytes, 0),
+                    Geography.fromWKB(point_bytes, 4326),
+                )
+            ],
+        )
+
+    def test_to_ddl(self):
+        schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())
+        self.assertEqual(schema.toDDL(), "a VOID,b BOOLEAN,c BINARY")
+
+        schema = StructType().add("a", IntegerType()).add("b", StringType())
+        self.assertEqual(schema.toDDL(), "a INT,b STRING")
+
+        schema = StructType().add("a", FloatType()).add("b", LongType(), False)
+        self.assertEqual(schema.toDDL(), "a FLOAT,b BIGINT NOT NULL")
+
+        schema = StructType().add("a", ArrayType(DoubleType()), False).add("b", DateType())
+        self.assertEqual(schema.toDDL(), "a ARRAY<DOUBLE> NOT NULL,b DATE")
+
+        schema = (
+            StructType().add("a", TimestampType()).add("b", TimestampNTZType()).add("c", TimeType())
+        )
+        self.assertEqual(schema.toDDL(), "a TIMESTAMP,b TIMESTAMP_NTZ,c TIME(6)")
+
     def test_from_ddl(self):
         self.assertEqual(DataType.fromDDL("long"), LongType())
         self.assertEqual(
@@ -2215,6 +2856,49 @@ class TypesTestsMixin:
             DataType.fromDDL("a int, v variant"),
             StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
         )
+        self.assertEqual(
+            DataType.fromDDL("a time(6)"),
+            StructType([StructField("a", TimeType(6))]),
+        )
+
+    # Ensures that changing the implementation of `DataType.fromDDL` in PR #47253 does not change
+    # `fromDDL`'s behavior.
+    def test_spark48834_from_ddl_matches_udf_schema_string(self):
+        from pyspark.sql.functions import udf
+
+        def schema_from_udf(ddl):
+            schema = (
+                self.spark.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
+            )
+            assert len(schema) == 1
+            return schema[0].dataType
+
+        tests = [
+            ("a:int, b:string", True),
+            (
+                "a struct<>, b map<int, binary>, "
+                + "c array<array<map<struct<a: int, b: int>, binary>>>",
+                True,
+            ),
+            ("struct<>", True),
+            ("struct<a: string, b: array<long>>", True),
+            ("", True),
+            ("a: int, b: variant", True),
+            ("<a: int, b: variant>", False),
+            ("randomstring", False),
+            ("struct", False),
+        ]
+        for test, is_valid_input in tests:
+            if is_valid_input:
+                self.assertEqual(DataType.fromDDL(test), schema_from_udf(test))
+            else:
+                with self.assertRaises(ParseException) as from_ddl_pe:
+                    DataType.fromDDL(test)
+                with self.assertRaises(ParseException) as udf_pe:
+                    schema_from_udf(test)
+                self.assertEqual(
+                    from_ddl_pe.exception.getCondition(), udf_pe.exception.getCondition()
+                )
 
     def test_collated_string(self):
         dfs = [
@@ -2232,7 +2916,7 @@ class TypesTestsMixin:
                 StringType("UTF8_LCASE"),
             )
 
-    def test_infer_array_element_type_with_struct(self):
+    def test_infer_nested_array_element_type_with_struct(self):
         # SPARK-48248: Nested array to respect legacy conf of inferArrayTypeFromFirstElement
         with self.sql_conf(
             {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
@@ -2338,8 +3022,8 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="FIELD_NOT_NULLABLE_WITH_NAME",
-            message_parameters={
+            errorClass="FIELD_NOT_NULLABLE_WITH_NAME",
+            messageParameters={
                 "field_name": "test_name",
             },
         )
@@ -2350,8 +3034,8 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
-            message_parameters={
+            errorClass="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+            messageParameters={
                 "data_type": "IntegerType()",
                 "field_name": "field b in field a",
                 "obj": "'data'",
@@ -2429,8 +3113,9 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (decimal.Decimal("1.0"), DecimalType()),
             # Binary
             (bytearray([1, 2]), BinaryType()),
-            # Date/Timestamp
+            # Date/Time/Timestamp
             (datetime.date(2000, 1, 2), DateType()),
+            (datetime.time(1, 0, 0), TimeType()),
             (datetime.datetime(2000, 1, 2, 3, 4), DateType()),
             (datetime.datetime(2000, 1, 2, 3, 4), TimestampType()),
             # Array
@@ -2493,8 +3178,9 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             ("1.0", DecimalType(), TypeError),
             # Binary
             (1, BinaryType(), TypeError),
-            # Date/Timestamp
+            # Date/Time/Timestamp
             ("2000-01-02", DateType(), TypeError),
+            ("23:59:59", TimeType(), TypeError),
             (946811040, TimestampType(), TypeError),
             # Array
             (["1", None], ArrayType(StringType(), containsNull=False), ValueError),

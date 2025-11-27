@@ -29,6 +29,7 @@ import numpy as np
 
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, LongType, DataType
+from pyspark.sql.utils import is_remote
 from pyspark.errors import AnalysisException
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Label, Name, Scalar
@@ -122,7 +123,7 @@ class AtIndexer(IndexerLike):
 
     Get value at specified row/column pair
 
-    >>> psdf.at[4, 'B']
+    >>> int(psdf.at[4, 'B'])
     2
 
     Get array if an index occurs multiple times
@@ -202,7 +203,7 @@ class iAtIndexer(IndexerLike):
 
     Get value at specified row/column pair
 
-    >>> df.iat[1, 2]
+    >>> int(df.iat[1, 2])
     1
 
     Get value within a series
@@ -214,7 +215,7 @@ class iAtIndexer(IndexerLike):
     30    3
     dtype: int64
 
-    >>> psser.iat[1]
+    >>> int(psser.iat[1])
     2
     """
 
@@ -534,11 +535,19 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     sdf = sdf.limit(sdf.count() + limit)
                 sdf = sdf.drop(NATURAL_ORDER_COLUMN_NAME)
         except AnalysisException:
-            raise KeyError(
-                "[{}] don't exist in columns".format(
-                    [col._jc.toString() for col in data_spark_columns]
-                )
-            )
+            if is_remote():
+                from pyspark.sql.connect.column import Column as ConnectColumn
+
+                cols_as_str = [
+                    cast(ConnectColumn, col)._expr.__repr__() for col in data_spark_columns
+                ]
+            else:
+                from pyspark.sql.classic.column import Column as ClassicColumn
+
+                cols_as_str = [
+                    cast(ClassicColumn, col)._jc.toString() for col in data_spark_columns
+                ]
+            raise KeyError("[{}] don't exist in columns".format(cols_as_str))
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -853,7 +862,7 @@ class LocIndexer(LocIndexerLike):
 
     Single label for column.
 
-    >>> df.loc['cobra', 'shield']
+    >>> int(df.loc['cobra', 'shield'])
     2
 
     List of labels for row.
@@ -1833,8 +1842,15 @@ def _test() -> None:
     import sys
     from pyspark.sql import SparkSession
     import pyspark.pandas.indexing
+    from pandas.util.version import Version
 
     os.chdir(os.environ["SPARK_HOME"])
+
+    if Version(np.__version__) >= Version("2"):
+        # Numpy 2.0+ changed its string format,
+        # adding type information to numeric scalars.
+        # `legacy="1.25"` only available in `nump>=2`
+        np.set_printoptions(legacy="1.25")  # type: ignore[arg-type]
 
     globs = pyspark.pandas.indexing.__dict__.copy()
     globs["ps"] = pyspark.pandas

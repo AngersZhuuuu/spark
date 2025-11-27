@@ -53,6 +53,9 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   Utils.loadDefaultSparkProperties(conf, propertiesFile)
+  // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+  Utils.resetStructuredLogging(conf)
+  Logging.uninitialize()
 
   // scalastyle:off line.size.limit println
   private def printUsageAndExit(exitCode: Int, error: String = ""): Unit = {
@@ -80,7 +83,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       configs.sortBy(_.key).foreach { conf =>
         sb.append("  ").append(conf.key.padTo(maxConfigLength, ' '))
         var currentDocLen = 0
-        val intention = "\n" + " " * (maxConfigLength + 2)
+        val intention = "\n" + " ".repeat(maxConfigLength + 2)
         conf.doc.split("\\s+").foreach { word =>
           if (currentDocLen + word.length > 60) {
             sb.append(intention).append(" ").append(word)

@@ -27,20 +27,20 @@ import org.apache.hive.service.cli.operation.GetFunctionsOperation
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.SparkSession
 
 /**
  * Spark's own GetFunctionsOperation
  *
- * @param sqlContext SQLContext to use
+ * @param session SparkSession to use
  * @param parentSession a HiveSession from SessionManager
  * @param catalogName catalog name. null if not applicable
  * @param schemaName database name, null or a concrete database name
  * @param functionName function name pattern
  */
 private[hive] class SparkGetFunctionsOperation(
-    val sqlContext: SQLContext,
+    val session: SparkSession,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
@@ -49,7 +49,7 @@ private[hive] class SparkGetFunctionsOperation(
   with SparkOperation
   with Logging {
 
-  override def runInternal(): Unit = {
+  override def runInternal(): Unit = withClassLoader { _ =>
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdMDC = log"catalog : ${MDC(LogKeys.CATALOG_NAME, catalogName)}, " +
       log"schemaPattern : ${MDC(LogKeys.DATABASE_NAME, schemaName)}"
@@ -57,11 +57,6 @@ private[hive] class SparkGetFunctionsOperation(
       log", functionName : ${MDC(LogKeys.FUNCTION_NAME, functionName)}'"
     logInfo(logMDC + log" with ${MDC(LogKeys.STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
-    val catalog = sqlContext.sessionState.catalog
     // get databases for schema pattern
     val schemaPattern = convertSchemaPattern(schemaName)
     val matchingDbs = catalog.listDatabases(schemaPattern)

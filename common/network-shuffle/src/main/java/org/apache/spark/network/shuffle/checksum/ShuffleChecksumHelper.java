@@ -19,12 +19,7 @@ package org.apache.spark.network.shuffle.checksum;
 
 import java.io.*;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.Adler32;
-import java.util.zip.CRC32;
-import java.util.zip.CheckedInputStream;
-import java.util.zip.Checksum;
-
-import com.google.common.io.ByteStreams;
+import java.util.zip.*;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -66,6 +61,13 @@ public class ShuffleChecksumHelper {
         }
       }
 
+      case "CRC32C"  -> {
+        checksums = new CRC32C[num];
+        for (int i = 0; i < num; i++) {
+          checksums[i] = new CRC32C();
+        }
+      }
+
       default -> throw new UnsupportedOperationException(
         "Unsupported shuffle checksum algorithm: " + algorithm);
     }
@@ -84,7 +86,7 @@ public class ShuffleChecksumHelper {
 
   private static long readChecksumByReduceId(File checksumFile, int reduceId) throws IOException {
     try (DataInputStream in = new DataInputStream(new FileInputStream(checksumFile))) {
-      ByteStreams.skipFully(in, reduceId * 8L);
+      in.skipNBytes(reduceId * 8L);
       return in.readLong();
     }
   }
@@ -152,7 +154,7 @@ public class ShuffleChecksumHelper {
     } catch (FileNotFoundException e) {
       // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
       logger.warn("Checksum file {} doesn't exit",
-        MDC.of(LogKeys.PATH$.MODULE$, checksumFile.getName()));
+        MDC.of(LogKeys.PATH, checksumFile.getName()));
       cause = Cause.UNKNOWN_ISSUE;
     } catch (Exception e) {
       logger.warn("Unable to diagnose shuffle block corruption", e);
@@ -165,9 +167,9 @@ public class ShuffleChecksumHelper {
         checksumByReader, checksumByWriter, checksumByReCalculation);
     } else {
       logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}, cause {}",
-        MDC.of(LogKeys.TIME$.MODULE$, duration),
-        MDC.of(LogKeys.PATH$.MODULE$, checksumFile.getAbsolutePath()),
-        MDC.of(LogKeys.REASON$.MODULE$, cause));
+        MDC.of(LogKeys.TIME, duration),
+        MDC.of(LogKeys.PATH, checksumFile.getAbsolutePath()),
+        MDC.of(LogKeys.REASON, cause));
     }
     return cause;
   }

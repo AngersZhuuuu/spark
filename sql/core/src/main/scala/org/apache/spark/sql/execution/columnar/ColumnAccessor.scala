@@ -28,7 +28,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -111,6 +111,10 @@ private[columnar] class IntervalColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[CalendarInterval](buffer, CALENDAR_INTERVAL)
   with NullableColumnAccessor
 
+private[columnar] class VariantColumnAccessor(buffer: ByteBuffer)
+  extends BasicColumnAccessor[VariantVal](buffer, VARIANT)
+  with NullableColumnAccessor
+
 private[columnar] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
   extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
 
@@ -143,7 +147,7 @@ private[sql] object ColumnAccessor {
       case ByteType => new ByteColumnAccessor(buf)
       case ShortType => new ShortColumnAccessor(buf)
       case IntegerType | DateType | _: YearMonthIntervalType => new IntColumnAccessor(buf)
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
         new LongColumnAccessor(buf)
       case FloatType => new FloatColumnAccessor(buf)
       case DoubleType => new DoubleColumnAccessor(buf)
