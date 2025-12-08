@@ -61,7 +61,6 @@ from pyspark.testing.sqlutils import (
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
-from pyspark.loose_version import LooseVersion
 
 if have_pandas:
     import pandas as pd
@@ -438,10 +437,12 @@ class ArrowTestsMixin:
             assert not df.filter(df["col2"].endswith(suffix)).isEmpty()
 
     def check_large_cached_local_relation_same_values(self):
-        data = [("C000000032", "R20", 0.2555)] * 500_000
+        row_count = 500_000
+        data = [("C000000032", "R20", 0.2555)] * row_count
         pdf = pd.DataFrame(data=data, columns=["Contrat", "Recommandation", "Distance"])
-        df = self.spark.createDataFrame(pdf)
-        df.collect()
+        for _ in range(2):
+            df = self.spark.createDataFrame(pdf)
+            assert df.count() == row_count
 
     def test_toArrow_keep_utc_timezone(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
@@ -1006,11 +1007,6 @@ class ArrowTestsMixin:
                         self.assertTrue(
                             expected[r][e] == result[r][e], f"{expected[r][e]} == {result[r][e]}"
                         )
-
-    def test_createDataFrame_pandas_with_struct_type(self):
-        for arrow_enabled in [True, False]:
-            with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_createDataFrame_pandas_with_struct_type(arrow_enabled)
 
     def test_createDataFrame_arrow_with_struct_type_nulls(self):
         t = pa.table(
@@ -1817,7 +1813,7 @@ class ArrowTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     pdf = df.toPandas()
                     assert_frame_equal(expected, pdf)
 
@@ -1846,7 +1842,7 @@ class ArrowTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     t_out = df.toArrow()
                     self.assertTrue(t_out.equals(t_in))
 
@@ -1863,7 +1859,7 @@ class ArrowTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     pdf = df.toPandas()
                     self.assertEqual(len(pdf), 10000)
                     self.assertEqual(pdf.columns.tolist(), ["id", "str_col", "mod_col"])
@@ -1880,7 +1876,7 @@ class ArrowTestsMixin:
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):
-                with self.sql_conf({"spark.sql.execution.arrow.compressionCodec": codec}):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     t = df.toArrow()
                     self.assertEqual(t.num_rows, 10000)
                     self.assertEqual(t.column_names, ["id", "str_col", "mod_col"])
@@ -1929,14 +1925,14 @@ class MaxResultArrowTests(unittest.TestCase):
 class EncryptionArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
-        return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
+        return super().conf().set("spark.io.encryption.enabled", "true")
 
 
 class RDDBasedArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
         return (
-            super(RDDBasedArrowTests, cls)
+            super()
             .conf()
             .set("spark.sql.execution.arrow.localRelationThreshold", "0")
             # to test multiple partitions

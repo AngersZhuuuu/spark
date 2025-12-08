@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -51,7 +52,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SparkConfWithEnv, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
@@ -1391,6 +1392,79 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     )
     encodeMethod.setAccessible(true)
     encodeMethod.invoke(db, key.getBytes, cfName).asInstanceOf[Array[Byte]]
+  }
+
+  testWithStateStoreCheckpointIdsAndColumnFamilies(
+    "RocksDB: keyExists over 1000 random keys across CFs",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) {
+    case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
+      val remoteDir = Utils.createTempDir().toString
+      new File(remoteDir).delete()
+
+      val conf = dbConf.copy(compactOnCommit = false)
+      withDB(
+        remoteDir,
+        conf = conf,
+        useColumnFamilies = colFamiliesEnabled,
+        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds) { db =>
+        val totalPresent = 500
+        val totalAbsent = 500
+
+        // Generate present and absent keys using simple disjoint prefixes
+        val presentKeysAll = (0 until totalPresent).map(i => s"present_$i")
+
+        // Insert present keys
+        db.load(0)
+        // If column families are enabled, create a CF and use it uniformly (after load)
+        val cfNameOpt =
+          if (colFamiliesEnabled) {
+            val cf = "test_cf_random"
+            db.createColFamilyIfAbsent(cf, isInternal = false)
+            Some(cf)
+          } else {
+            None
+          }
+        cfNameOpt match {
+          case Some(cf) =>
+            presentKeysAll.foreach { k => db.put(k, s"v_$k", cf) }
+          case None =>
+            presentKeysAll.foreach { k => db.put(k, s"v_$k") }
+        }
+
+        // Generate absent keys using a different prefix to avoid overlap
+        val absentKeysAll = (0 until totalAbsent).map(i => s"absent_$i")
+
+        // Validation helper to avoid duplication
+        def validate(label: String): Unit = {
+          cfNameOpt match {
+            case Some(cf) =>
+              presentKeysAll.foreach { k =>
+                assert(db.keyExists(k, cf),
+                  s"$label Expected keyExists(true) for present CF key $k")
+              }
+              absentKeysAll.foreach { k =>
+                assert(!db.keyExists(k, cf),
+                  s"$label Expected keyExists(false) for absent CF key $k")
+              }
+            case None =>
+              presentKeysAll.foreach { k =>
+                assert(db.keyExists(k),
+                  s"$label Expected keyExists(true) for present default key $k")
+              }
+              absentKeysAll.foreach { k =>
+                assert(!db.keyExists(k),
+                  s"$label Expected keyExists(false) for absent default key $k")
+              }
+          }
+        }
+
+        // First check before commit
+        validate("(pre-commit)")
+
+        // Commit and re-check
+        db.commit()
+        validate("(post-commit)")
+      }
   }
 
   testWithStateStoreCheckpointIdsAndColumnFamilies(s"RocksDB: get, put, iterator, commit, load",
@@ -3868,6 +3942,29 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }}
   }
 
+  test("SPARK-44639: Use Java tmp dir instead of configured local dirs on Yarn") {
+    val conf = new Configuration()
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    val provider = new RocksDBStateStoreProvider()
+    provider.sparkConf = new SparkConfWithEnv(Map("CONTAINER_ID" -> "1"))
+    provider.init(
+      StateStoreId(
+        "/checkpoint",
+        0,
+        0
+      ),
+      new StructType(),
+      new StructType(),
+      NoPrefixKeyStateEncoderSpec(new StructType()),
+      false,
+      new StateStoreConf(sqlConf),
+      conf
+    )
+
+    assert(provider.rocksDB.localRootDir.getParent() == System.getProperty("java.io.tmpdir"))
+  }
+
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   class RocksDBCheckpointFormatV2(
@@ -3894,8 +3991,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
     }
 
-    override def commit(): (Long, StateStoreCheckpointInfo) = {
-      val ret = super.commit()
+    override def commit(
+        forceSnapshotOnCommit: Boolean = false
+      ): (Long, StateStoreCheckpointInfo) = {
+      val ret = super.commit(forceSnapshotOnCommit)
       // update versionToUniqueId from lineageManager
       lineageManager.getLineageForCurrVersion().foreach {
         case LineageItem(version, id) => versionToUniqueId.getOrElseUpdate(version, id)
